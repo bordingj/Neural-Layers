@@ -1,0 +1,2 @@
+from nula.models import blstm_seq_embed
+BLSTMSequenceEmbed = blstm_seq_embed.BLSTMSequenceEmbed
