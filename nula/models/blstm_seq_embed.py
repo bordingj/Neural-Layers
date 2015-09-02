@@ -140,13 +140,13 @@ class BLSTMSequenceEmbed(object):
                 on_gpu=False):
         """
         Given input batch X this function propagates forward through the network,
-        forward and backward through-time and returns the outputs at every time-step
+        forward and backward through-time and returns a vector representation of the sequences
         In:
             X: 3D array of type int32
                 (first dimension must be time, second dimension batch_samples,
                 and third index is the size of the input space)
         Out:
-            List of outputs at each time step
+            vector representations of all sequences in the batch
         """
         
         if on_gpu:

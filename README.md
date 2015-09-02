@@ -12,3 +12,5 @@ nula reimplements some functions which are already available in chainer, but som
 nula-functions are chainer-functions with an additional .copy() method whis performs a deep-copy of the arrays of the function except for its parameters and its gradients of its parameters. Moreover, nula-functions provides an option not to copy itself on a function-call (copy_func=..), thereby providing a possibility to reuse allocated arrays of the function (for example its output(s)). Note that YOU SHOULD NOT pass copy_func=False if the same instantiation of a function is called multiple times before running .backward() !!
 
 It is perfectly fine to mix nula-functions and chainer-functions. A simple example of how to build a recurrent LSTM network can be found in nula/models/lstm_embed.py
+
+Expect around a 10-30% speedup from using nula-functions instead of pure chainer.
