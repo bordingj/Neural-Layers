@@ -73,12 +73,12 @@ class BLSTMSequenceEmbed(object):
         for name, function in self.functions_list[t].items():
             setattr(self, name, function)
 
-    def to_gpu(self):
+    def to_gpu(self, device):
         self.function_set.to_gpu()
         if hasattr(self, 'functions_list'):
             for funcs in self.functions_list:
                 for func in funcs.values():
-                    func.to_gpu()
+                    func.to_gpu(device)
     
     def to_cpu(self):
         self.function_set.to_cpu()
@@ -128,12 +128,18 @@ class BLSTMSequenceEmbed(object):
     
     def get_backward_states(self, h0, states_tp1, train=True):
         #backward direction
-        h1_b, c1_b   = self.h0_to_h1_b(self.dropout1_b(h0, copy_func=not self.prepared), 
-                                       states_tp1['h1'], states_tp1['c1'],
+        if train:
+            h1_b, c1_b   = self.h0_to_h1_b(self.dropout1_b(h0, copy_func=not self.prepared), 
+                                           states_tp1['h1'], states_tp1['c1'],
+                                            copy_func=not self.prepared)
+            h2_b, c2_b   = self.h1_to_h2_b(self.dropout2_b(h1_b, copy_func=not self.prepared),
+                                        states_tp1['h2'], states_tp1['c2'],
                                         copy_func=not self.prepared)
-        h2_b, c2_b   = self.h1_to_h2_b(self.dropout2_b(h1_b, copy_func=not self.prepared),
-                                    states_tp1['h2'], states_tp1['c2'],
-                                    copy_func=not self.prepared)
+        else:
+            h1_b, c1_b   = self.h0_to_h1_b(h0, states_tp1['h1'], states_tp1['c1'],
+                                            copy_func=not self.prepared)
+            h2_b, c2_b   = self.h1_to_h2_b(h1_b, states_tp1['h2'], states_tp1['c2'],
+                                        copy_func=not self.prepared)
         return {'c1': c1_b, 'h1': h1_b, 'c2': c2_b, 'h2': h2_b}
     
     def forward(self, X,  initial_states=None, train=True,
@@ -199,4 +205,5 @@ class BLSTMSequenceEmbed(object):
 
     def save(self, fn):
         f = open(fn, 'wb')
-        pickle.dump(copy.deepcopy(self).to_cpu(), f); f.close()
+        pickle.dump(copy.deepcopy(self).to_cpu(), f); 
+        f.close()
