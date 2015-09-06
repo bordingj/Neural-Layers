@@ -1,4 +1,6 @@
 *.pyc
+*.pkl
+*.log
 
 
 # Compiled source #
