@@ -7,7 +7,6 @@ import string
 import random
 import pickle
 import copy
-import multiprocessing as mp
 import cupy as cp
 
 def accuracy(probs, t):
@@ -44,16 +43,6 @@ def get_loss(network, X, labels, dropout_ratio, on_gpu):
     t = Variable(labels, volatile=False)
         
     return F.softmax_cross_entropy(y, t)
-
-def parallel_f(network, device,  X, labels, dropout_ratio):
-    with cp.cuda.Device(device):
-        for grad in network.gradients:
-            grad.fill(0)
-        loss = get_loss(network, X, labels, 
-                        on_gpu=True, 
-                        dropout_ratio=dropout_ratio)
-        loss.backward()
-    return loss
 
 class DocumentClassifier(object):
     
@@ -158,24 +147,15 @@ class DocumentClassifier(object):
 
     def fit(self, save_path, batchsize, seq_len, 
                     max_time_in_minutes, no_iterations_per_epoch=1000, 
-                    clip_threshold=8, on_gpu=True, devices=None,
-                    multi_gpu=False):
+                    clip_threshold=8, on_gpu=True, device=None):
         
-        
-        
-        if multi_gpu:
-            assert on_gpu
-            assert hasattr(devices, '__iter__')
-            #assert len(set(devices)) == len(devices)
-            self.network.to_gpu(devices[0])
-            extra_network = copy.deepcopy(self.network).to_gpu(devices[1])
-
+        if on_gpu:
+            assert device is None or isinstance(device, int)
+            device = cuda.Device(device)
+            device.use()
+            self.network.to_gpu()
         else:
-            assert devices is None or isinstance(devices, int)
-            if on_gpu:
-                self.network.to_gpu(devices)
-            else:
-                self.network.to_cpu()
+            self.network.to_cpu()
         
         
         optimizer = optimizers.Adam()
@@ -202,33 +182,13 @@ class DocumentClassifier(object):
             for X, labels in train_Generator:
                 k += 1
                 
-                if multi_gpu:
-                    
-                    pool = mp.Pool(processes=4)
-                    results = [pool.apply(parallel_f, 
-                                            args=(self.network, devices[0], 
-                                                  X, labels, self.dropout_ratio)) \
-                               for network, device in zip((self.network,extra_network),
-                                                          devices)
-                                ]
-                    loss = results[0]
-                    #parallel_f(self.network, devices[0], X, labels, self.dropout_ratio)
-                    #parallel_f(extra_network, devices[1], X, labels, self.dropout_ratio)
-                    #accumulate gradients
-                    for g_dst, g_src in zip(self.network.gradients, extra_network.gradients):
-                        with cp.cuda.Device(devices[0]):
-                            g_dst += cuda.copy(g_src, out_device=g_dst.data.device)
-                    optimizer.clip_grads(clip_threshold)
-                    optimizer.update()
-                    extra_network.copy_parameters_from(self.network.parameters)
-                else:
-                    optimizer.zero_grads() #important! before anything!
-                    loss = get_loss(self.network, X, labels, 
+                optimizer.zero_grads() #important! before anything!
+                loss = get_loss(self.network, X, labels, 
                                         on_gpu=on_gpu, 
                                         dropout_ratio=self.dropout_ratio)
-                    loss.backward()                
-                    optimizer.clip_grads(clip_threshold)
-                    optimizer.update()
+                loss.backward()                
+                optimizer.clip_grads(clip_threshold)
+                optimizer.update()
             
             #get train performance
             train_loss_list.append(cuda.to_cpu(loss.data).copy())
@@ -272,6 +232,7 @@ class DocumentClassifier(object):
             
         print('\nTraining took {} minutes.'.format(int(time_elapsed/60)))
         print('Performed {} iterations.'.format(k))
+        print('Saw {} samples per second'.format(batchsize*k/time_elapsed))
         self.save(save_path)
         
     def predict_single_string(self, search_string, on_gpu, return_as_IDs=True):

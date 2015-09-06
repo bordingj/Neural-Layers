@@ -1,5 +1,5 @@
 
-from nula.models import BLSTMSequenceEmbed
+from nula.models import BLSTMSequenceEmbed, BLSTMSequenceEmbedwAttention
 from document_classifier import DocumentClassifier
 import pandas as pd
 import string
@@ -14,7 +14,9 @@ if __name__ == '__main__':
     
     corpus_path = '/home/bordingj/data/findZebra_corpus.pkl'
     corpus = pd.read_pickle(corpus_path)
-    corpus['umls_concept_id'].astype(str, inplace=True)
+    #remove None
+    corpus = corpus.loc[~pd.isnull(corpus['umls_concept_id']),:]
+    corpus['umls_concept_id'] = corpus['umls_concept_id'].astype(str)
     corpus['text_lens'] = [len(text) for text in corpus['text']]
     
     no_characters_lower_limit = 200
@@ -22,7 +24,7 @@ if __name__ == '__main__':
     
     whole_corpus = False
     if not whole_corpus:
-        number_of_articles = 30
+        number_of_articles = 50
         assert number_of_articles <= corpus.shape[0]
         corpus = corpus.iloc[:number_of_articles,:]
     
@@ -33,18 +35,18 @@ if __name__ == '__main__':
     
     dropout_ratio = 0
     
-    RNN_model = BLSTMSequenceEmbed(in_size=in_size,
+    RNN_model = BLSTMSequenceEmbedwAttention(in_size=in_size,
                                   no_labels=out_size, 
                                   no_units=no_units)
                               
     clf = DocumentClassifier(corpus=corpus, dropout_ratio=dropout_ratio,
                                         network=RNN_model)
     
-    batchsize     = 400
+    batchsize     = 512
     seq_len       = 50
-    training_time = 2
+    training_time = 60*4
     no_iterations_per_epoch = 100
-    path          = 'BLSTMSequenceEmbed_'
+    path          = 'BLSTMSequenceEmbedwAttention_' + str(no_units) +' units_'
     if dropout_ratio == 0:
         path += 'noDropout_'
     path += 'results.pkl'
@@ -70,7 +72,6 @@ if __name__ == '__main__':
                 no_iterations_per_epoch=no_iterations_per_epoch, 
                 clip_threshold=8,
                   on_gpu=True,
-                  devices=0,
-                  multi_gpu=False)
+                  device=0)
     
     
