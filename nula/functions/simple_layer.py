@@ -2,7 +2,7 @@
 
 import numpy as np
 from chainer import cuda
-from nula import function
+from chainer import function
 from chainer.utils import type_check
 
 from nula import cpu
@@ -90,14 +90,6 @@ class SimpleLayer(function.Function):
         else:
             return 'gW',
 
-    def prepare(self, batchsize, on_gpu):
-        xp = cp if on_gpu else np
-        self.z  = xp.empty((batchsize,self.out_size), dtype=np.dtype('float32'))
-        if not self.hot:
-            self.gx = xp.empty((batchsize,self.in_size), dtype=np.dtype('float32'))
-        if not self.nobias:
-            self.gb_ones = cp.ones((1,batchsize),dtype=np.dtype('float32'))
-
     def check_type_forward(self, in_types):
         x, = in_types
         
@@ -115,10 +107,10 @@ class SimpleLayer(function.Function):
     def forward(self, inputs):
         xp = cuda.get_array_module(*inputs)
         x = inputs[0]
-        N = x.shape[0]
-
-        if self.z is None or self.z.shape[0] != N or type(self.z) != type(x):
-            self.prepare(N, (xp == cp))
+        
+        batchsize = x.shape[0]
+        
+        self.z  = xp.empty((batchsize,self.out_size), dtype=np.dtype('float32'))
         
         if xp is np:
             self.act_func = self.act_func
@@ -158,6 +150,8 @@ class SimpleLayer(function.Function):
         gh = grad_outputs[0]
         x = inputs[0]
         
+        batchsize = x.shape[0]
+        
         if self.act_func_str in ('tanh', 'sigmoid'):
             #backpropagate non-linearities
             gz = self.gact_func(gy=gh, y=self.h, out=self.h)
@@ -175,19 +169,23 @@ class SimpleLayer(function.Function):
                 gx = None
                 cpu.utils.dothot(gz, x, out=self.gW)
             else:
-                gx = np.dot(gz, self.W, out=self.gx)
+                gx = xp.empty((batchsize,self.in_size), dtype=np.dtype('float32'))
+                gx = np.dot(gz, self.W, out=gx)
                 self.gW += gz.T.dot(x)
             if not self.nobias:
-                self.gb += np.dot(self.gb_ones, gz)
+                gb_ones = xp.ones((1,batchsize),dtype=np.dtype('float32'))
+                self.gb += np.dot(gb_ones, gz)
         else:
             if self.hot:
                 gx = None
                 gpu.utils.dothot(gz, x, in_size=self.in_size, out=self.gW)
             else:
-                gx = cp.dot(gz, self.W, out=self.gx)
+                gx = xp.empty((batchsize,self.in_size), dtype=np.dtype('float32'))
+                gx = cp.dot(gz, self.W, out=gx)
                 gpu.utils.dot_add(A=gz, B=x, C=self.gW, transa=True)
             if not self.nobias:
-                gpu.utils.dot_add(A=self.gb_ones, B=gz, C=self.gb)
+                gb_ones = xp.ones((1,batchsize),dtype=np.dtype('float32'))
+                gpu.utils.dot_add(A=gb_ones, B=gz, C=self.gb)
          
         return gx, 
  
@@ -272,14 +270,6 @@ class SimpleLayer2Inputs(function.Function):
         else:
             return 'gW1', 'gW2'
 
-    def prepare(self, batchsize, on_gpu):
-        xp = cp if on_gpu else np
-        self.z  = xp.empty((batchsize,self.out_size), dtype=np.dtype('float32'))
-        self.gx1 = xp.empty((batchsize,self.in_size1), dtype=np.dtype('float32'))
-        self.gx2 = xp.empty((batchsize,self.in_size2), dtype=np.dtype('float32'))
-        if not self.nobias:
-            self.gb_ones = cp.ones((1,batchsize),dtype=np.dtype('float32'))
-
     def check_type_forward(self, in_types):
         x1, x2 = in_types
         
@@ -288,16 +278,16 @@ class SimpleLayer2Inputs(function.Function):
             x2.shape[1] == self.in_size2,
             x1.dtype == np.float32,
             x1.dtype == x2.dtype,
+            x1.shape[0] == x2.shape[0],
         )
         
         
     def forward(self, inputs):
         xp = cuda.get_array_module(*inputs)
         x1, x2 = inputs
-        N = x1.shape[0]
-
-        if self.z is None or self.z.shape[0] != N or type(self.z) != type(x1):
-            self.prepare(N, (xp == cp))
+        batchsize = x1.shape[0]
+        
+        self.z  = xp.empty((batchsize,self.out_size), dtype=np.dtype('float32'))
         
         if xp is np:
             self.act_func = self.act_func
@@ -332,6 +322,10 @@ class SimpleLayer2Inputs(function.Function):
         xp = cuda.get_array_module(*inputs)
         gh = grad_outputs[0]
         x1, x2 = inputs
+        batchsize = x1.shape[0]
+        
+        gx1 = xp.empty((batchsize,self.in_size1), dtype=np.dtype('float32'))
+        gx2 = xp.empty((batchsize,self.in_size2), dtype=np.dtype('float32'))
          
         if self.act_func_str in ('tanh', 'sigmoid'):
             #backpropagate non-linearities
@@ -346,18 +340,20 @@ class SimpleLayer2Inputs(function.Function):
 
         if xp is np:
             #backpropagate linear function
-            gx1 = np.dot(gz, self.W1, out=self.gx1)
-            gx2 = np.dot(gz, self.W2, out=self.gx2)
+            gx1 = np.dot(gz, self.W1, out=gx1)
+            gx2 = np.dot(gz, self.W2, out=gx2)
             self.gW1 += gz.T.dot(x1)
             self.gW2 += gz.T.dot(x2)
             if not self.nobias:
-                self.gb += np.dot(self.gb_ones, gz)
+                gb_ones = xp.ones((1,batchsize),dtype=np.dtype('float32'))
+                self.gb += np.dot(gb_ones, gz)
         else:
-            gx1 = cp.dot(gz, self.W1, out=self.gx1)
-            gx2 = cp.dot(gz, self.W2, out=self.gx2)
+            gx1 = cp.dot(gz, self.W1, out=gx1)
+            gx2 = cp.dot(gz, self.W2, out=gx2)
             gpu.utils.dot_add(A=gz, B=x1, C=self.gW1, transa=True)
             gpu.utils.dot_add(A=gz, B=x2, C=self.gW2, transa=True)
             if not self.nobias:
-                gpu.utils.dot_add(A=self.gb_ones, B=gz, C=self.gb)
+                gb_ones = xp.ones((1,batchsize),dtype=np.dtype('float32'))
+                gpu.utils.dot_add(A=gb_ones, B=gz, C=self.gb)
          
         return gx1, gx2

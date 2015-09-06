@@ -1,10 +1,9 @@
 
 import numpy as np
 from chainer import cuda
-from nula import function
+from chainer import function
 from chainer.utils import type_check
-import math
-from numba import jit
+from nula.functions import lstm_cpu_funcs
 from nula import cpu
 
 if cuda.available:
@@ -51,15 +50,6 @@ class LSTMLayer(function.Function):
             return 'gW', 'gV', 'gb'
         else:
             return 'gW', 'gV'
-        
-    def prepare(self, batchsize, on_gpu):
-        xp = cp if on_gpu else np
-        self.z       = xp.empty((batchsize,self.out_size*4),dtype=np.dtype('float32'))
-        self.c       = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
-        self.h       = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
-        self.gx      = xp.empty((batchsize,self.in_size),dtype=np.dtype('float32'))
-        if not self.nobias:
-            self.gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
     
     def check_type_forward(self, in_types):
         x, h_tm1, c_tm1 = in_types
@@ -77,10 +67,11 @@ class LSTMLayer(function.Function):
         xp = cuda.get_array_module(*inputs)
         x, h_tm1, c_tm1 = inputs
         
-        N = x.shape[0]
+        batchsize = x.shape[0]
         
-        if self.z is None or self.z.shape[0] != N or type(self.z) != type(x):
-            self.prepare(N, (xp is cp))
+        self.z       = xp.empty((batchsize,self.out_size*4),dtype=np.dtype('float32'))
+        self.c       = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
+        self.h       = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
 
         if xp is np:
             self.z = np.dot(x, self.W.T, out=self.z)
@@ -118,6 +109,10 @@ class LSTMLayer(function.Function):
         
         gc_tm1 = self.c
         
+        batchsize = x.shape[0]
+        
+        gx      = xp.empty((batchsize,self.in_size),dtype=np.dtype('float32'))
+        
         if xp is np:
             _lstm_backward_cpu(c=self.c, z=self.z, gh=gh, 
                           gc=gc, c_tm1=c_tm1,
@@ -125,11 +120,12 @@ class LSTMLayer(function.Function):
             gz = self.z
             gh_tm1 = np.dot(gz, self.V, out=self.h)
             # compute gradient with respect to the input x
-            gx = np.dot(gz, self.W, out=self.gx)
+            gx = np.dot(gz, self.W, out=gx)
              # compute gradients of weight matrices
             self.gW += gz.T.dot(x)
             self.gV += gz.T.dot(h_tm1)
             if not self.nobias:
+                gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
                 self.gb += np.dot(self.gb_ones, gz)
         else:
             _lstm_backward_gpu(c=self.c, z=self.z, gh=gh, 
@@ -139,88 +135,17 @@ class LSTMLayer(function.Function):
             gz = self.z
             gh_tm1 = cp.dot(gz, self.V, out=self.h)
             # compute gradient with respect to the input x
-            gx = cp.dot(gz, self.W, out=self.gx)
+            gx = cp.dot(gz, self.W, out=gx)
             # compute gradients of weight matrices
             gpu.utils.dot_add(gz, x, C=self.gW, transa=True)
             gpu.utils.dot_add(gz, h_tm1, C=self.gV, transa=True)
             if not self.nobias:
-                gpu.utils.dot_add(self.gb_ones, gz, C=self.gb)
+                gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
+                gpu.utils.dot_add(gb_ones, gz, C=self.gb)
 
         return gx, gh_tm1, gc_tm1
 
-@jit('f4[:,:](f4[:,:], i8)')
-def _lstm_apply_nonlinearity_cpu(z, out_size):
-    
-    N, M = z.shape
-    cut = out_size*3
-        
-    for i in range(N):
-        for j in range(M):
-            if j < cut:
-                z[i,j] = 1/(1+math.exp(-z[i,j]))
-            else:
-                z[i,j] = math.tanh(z[i,j])
-    return z
 
-@jit('void(f4[:,:], f4[:,:], f4[:,:], f4[:,:])')
-def _lstm_final_mem_cell_cpu(z, c_tm1, c, h):
-    N, M = c.shape
-        
-    for i in range(N):
-        for j in range(M):
-            i_t = z[i,j]
-            f_t = z[i,(j+M)]
-            o_t = z[i,(j+M*2)]
-            c_tilde_t = z[i,(j+M*3)]
-            
-            c_k = f_t*c_tm1[i,j] + i_t*c_tilde_t
-            
-            c[i,j] = c_k
-
-            h[i,j] = math.tanh(c_k)*o_t
-
-def _lstm_forward_cpu(z, c_tm1, c, h, out_size):
-    _lstm_apply_nonlinearity_cpu(z=z, out_size=out_size)
-    #final memory cell
-    _lstm_final_mem_cell_cpu(z=z, c_tm1=c_tm1, c=c, h=h)
-    
-@jit('void(f4[:,:], f4[:,:], f4[:,:], f4[:,:], f4[:,:], b1, b1)')
-def _lstm_backward_cpu(c, z, gh, gc, c_tm1, 
-                       gh_is_none, gc_is_none):
-    N, M = c.shape
-        
-    for i in range(N):
-        for j in range(M):
-            i_t = z[i,j]
-            f_t = z[i,(j+M)]
-            o_t = z[i,(j+M*2)]
-            c_tilde_t = z[i,(j+M*3)]
-            
-            tanh_c_k = math.tanh(c[i,j])
-            
-            if gh_is_none:
-                gh_k = 0.0
-            else:
-                gh_k = gh[i,j]
-            if gc_is_none:
-                gc_k = 0.0
-            else:
-                gc_k = gc[i,j]
-
-            gc_tm1_k = gh_k * o_t * (1 - tanh_c_k**2)+gc_k
-            c[i,j] = gc_tm1_k*f_t #we use the memory for c as gc_tm1
-            
-            gi_k = gc_tm1_k* c_tilde_t * i_t * (1-i_t);
-
-            z[i,(j+M*3)] = gc_tm1_k* i_t * (1-c_tilde_t*c_tilde_t);
-
-            gf_k = gc_tm1_k* c_tm1[i,j] * f_t * (1-f_t);
-
-            z[i,(j+M*2)] = gh_k* tanh_c_k * o_t * (1-o_t);
-
-            z[i,j] = gi_k;
-
-            z[i,(j+M)] = gf_k;
 
 
 @cp.util.memoize(for_each_device=True)
@@ -352,3 +277,13 @@ def _lstm_backward_gpu(c, z, gh, gc, c_tm1, gc_is_none, gh_is_none):
                      c_tm1, gc, np.int32(gc_is_none), np.int32(gh_is_none),
                      np.int32(N), np.int32(M))
                      )
+
+def _lstm_forward_cpu(z, c_tm1, c, h, out_size):
+    lstm_cpu_funcs.lstm_apply_nonlinearity(z=z, out_size=out_size)
+    #final memory cell
+    lstm_cpu_funcs.lstm_final_mem_cell(z=z, c_tm1=c_tm1, c=c, h=h)
+
+def _lstm_backward_cpu(c, z, gh, gc, c_tm1, 
+                       gh_is_none, gc_is_none):
+    lstm_cpu_funcs.lstm_backward_finalmem_and_nonlinearities(c, z, gh, gc, c_tm1, 
+                                           gh_is_none, gc_is_none)

@@ -1,7 +1,7 @@
 
 import numpy as np
 from chainer import cuda
-from nula import function
+from chainer import function
 from chainer.utils import type_check
 
 if cuda.available:
@@ -14,16 +14,9 @@ class Dropout(function.Function):
 
     """Dropout regularization."""
 
-    def __init__(self, dropout_ratio, no_cols):
+    def __init__(self, dropout_ratio):
         self.dropout_ratio = dropout_ratio
-        self.no_cols = no_cols
-        self.y = None
 
-    def prepare(self, batchsize, on_gpu):
-        xp = cp if on_gpu else np
-        self.mask = xp.empty((batchsize, self.no_cols), dtype=np.dtype('float32'))
-        self.y    = xp.empty_like(self.mask)
-        self.gx   = xp.empty_like(self.mask)
 
     def check_type_forward(self, in_types):
         x, = in_types
@@ -34,29 +27,51 @@ class Dropout(function.Function):
         
     def forward(self, inputs):
         xp = cuda.get_array_module(*inputs)
-        x, = inputs
+        x, = inputs   
+        
+        self.mask = xp.empty_like(x)
+        y         = xp.empty_like(self.mask)
+        
         scale = 1. / (1 - self.dropout_ratio)
-        N = x.shape[0]
-        if self.y is None or self.y.shape[0] != N or type(self.y) != type(x):
-            self.prepare(N, (xp == cp) )
             
         if xp is np:
             self.mask = np.random.rand(*x[0].shape)
             self.mask = scale * (self.mask >= self.dropout_ratio)
-            np.multiply(self.mask, x, out=self.y)
+            np.multiply(self.mask, x, out=y)
         else:
-            _get_mask_and_apply_dropout(x, self.mask, self.y, self.dropout_ratio, scale)
-        return self.y,
+            _get_mask_and_apply_dropout(x, self.mask, y, self.dropout_ratio, scale)
+        return y,
     
     def backward(self, inputs, grad_outputs):
         xp = cuda.get_array_module(*inputs)
         x, = inputs
         gy, = grad_outputs
+        
+        gx   = xp.empty_like(self.mask)
+        
         if xp is np:
-            self.gx = np.multiply(gy, self.mask, out=self.gx)
+            gx = np.multiply(gy, self.mask, out=gx)
         else:
-            gpu.utils.hadamard(gy, self.mask, out=self.gx)
-        return self.gx,
+            gpu.utils.hadamard(gy, self.mask, out=gx)
+        return gx,
+
+def dropout(x, ratio=.5, train=True):
+    """Drops elements of input variable randomly.
+    This function drops input elements randomly with probability ``ratio`` and
+    scales the remaining elements by factor ``1 / (1 - ratio)``. In testing
+    mode, it does nothing and just returns ``x``.
+    Args:
+        x (~chainer.Variable): Input variable.
+        ratio (float): Dropout ratio.
+        train (bool): If True, executes dropout. Otherwise, does nothing.
+    Returns:
+        ~chainer.Variable: Output variable.
+    See the paper by G. Hinton: `Improving neural networks by preventing \
+    co-adaptation of feature detectors <http://arxiv.org/abs/1207.0580>`_.
+    """
+    if train:
+        return Dropout(ratio)(x)
+    return x
 
 @cp.util.memoize(for_each_device=True)
 def _get_dropout_kernel():

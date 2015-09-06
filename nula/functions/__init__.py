@@ -8,3 +8,4 @@ SimpleLayer2Inputs = simple_layer.SimpleLayer2Inputs
 
 from nula.functions import dropout
 Dropout = dropout.Dropout
+dropout = dropout.dropout
