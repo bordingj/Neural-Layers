@@ -127,8 +127,9 @@ class SimpleLayer(function.Function):
             self.gact_func = self.gact_func_gpu
             if self.hot:
                 gpu.utils.hotdot(self.W, x, out=self.z, dont_add=True)
-            else:
-                z = cp.dot(x, self.W.T, out=self.z)
+            else:              
+                z = gpu.utils.dot_add(A=x, B=self.W, C=self.z, transb=True, beta=0)
+                #z = cp.dot(x, self.W.T, out=self.z)
             if not self.nobias:
                 gpu.utils.addVec2Mat(self.z, self.b)
         
@@ -149,7 +150,6 @@ class SimpleLayer(function.Function):
         xp = cuda.get_array_module(*inputs)
         gh = grad_outputs[0]
         x = inputs[0]
-        
         batchsize = x.shape[0]
         
         if self.act_func_str in ('tanh', 'sigmoid'):
@@ -181,12 +181,12 @@ class SimpleLayer(function.Function):
                 gpu.utils.dothot(gz, x, in_size=self.in_size, out=self.gW)
             else:
                 gx = xp.empty((batchsize,self.in_size), dtype=np.dtype('float32'))
-                gx = cp.dot(gz, self.W, out=gx)
+                gx = gpu.utils.dot_add(A=gz, B=self.W, C=gx, beta=0)
+                #gx = cp.dot(gz, self.W, out=gx)
                 gpu.utils.dot_add(A=gz, B=x, C=self.gW, transa=True)
             if not self.nobias:
                 gb_ones = xp.ones((1,batchsize),dtype=np.dtype('float32'))
                 gpu.utils.dot_add(A=gb_ones, B=gz, C=self.gb)
-         
         return gx, 
  
 class SimpleLayer2Inputs(function.Function):
@@ -300,8 +300,9 @@ class SimpleLayer2Inputs(function.Function):
         else:
             self.act_func = self.act_func_gpu
             self.gact_func = self.gact_func_gpu
-            z = cp.dot(x1, self.W1.T, out=self.z)
-            gpu.utils.dot_add(A=z,  B=self.W2, C=z, transb=True)
+            z = gpu.utils.dot_add(A=x1, B=self.W1, C=self.z, transb=True, beta=0)
+            #z = cp.dot(x1, self.W1.T, out=self.z)
+            gpu.utils.dot_add(A=x2,  B=self.W2, C=z, transb=True)
             if not self.nobias:
                 gpu.utils.addVec2Mat(self.z, self.b)
         
@@ -348,8 +349,10 @@ class SimpleLayer2Inputs(function.Function):
                 gb_ones = xp.ones((1,batchsize),dtype=np.dtype('float32'))
                 self.gb += np.dot(gb_ones, gz)
         else:
-            gx1 = cp.dot(gz, self.W1, out=gx1)
-            gx2 = cp.dot(gz, self.W2, out=gx2)
+            gx1 = gpu.utils.dot_add(A=gz, B=self.W1, C=gx1, beta=0)
+            gx2 = gpu.utils.dot_add(A=gz, B=self.W2, C=gx2, beta=0)
+            #gx1 = cp.dot(gz, self.W1, out=gx1)
+            #gx2 = cp.dot(gz, self.W2, out=gx2)
             gpu.utils.dot_add(A=gz, B=x1, C=self.gW1, transa=True)
             gpu.utils.dot_add(A=gz, B=x2, C=self.gW2, transa=True)
             if not self.nobias:

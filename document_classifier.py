@@ -2,6 +2,7 @@
 import numpy as np
 from chainer import cuda, Variable, optimizers
 import chainer.functions as F
+import nula
 import time
 import string
 import random
@@ -27,22 +28,7 @@ def Recallatk(probs, t, k):
     relevant_docs = relevant_docs.astype(np.float32)
     return relevant_docs.mean()
 
-def get_loss(network, X, labels, dropout_ratio, on_gpu):
-                     
-    T, batchsize, D = X.shape
-    assert labels.shape == (batchsize,)
-            
-    y = network.forward(X, 
-                        dropout_ratio=dropout_ratio, 
-                        train=True,
-                        on_gpu=on_gpu)
-        
-    if on_gpu:
-        labels = cuda.to_gpu(labels.astype(np.int32))
-            
-    t = Variable(labels, volatile=False)
-        
-    return F.softmax_cross_entropy(y, t)
+
 
 class DocumentClassifier(object):
     
@@ -63,7 +49,7 @@ class DocumentClassifier(object):
         
         self.train_performance = {}
         self.test_performance = {}
-    
+        
     def save(self, path):
         with open(path,'wb') as f:
             a_copy = copy.copy(self)
@@ -135,9 +121,26 @@ class DocumentClassifier(object):
             X = np.atleast_3d(X)
             yield X, labels
 
+    def get_loss(self, X, labels, on_gpu):
+                         
+        T, batchsize, D = X.shape
+        assert labels.shape == (batchsize,)
+        
+        y = self.network.forward(X,
+                                 dropout_ratio=self.dropout_ratio, 
+                                 train=True,
+                                 on_gpu=on_gpu)
+            
+        if on_gpu:
+            labels = cuda.to_gpu(labels.astype(np.int32))
+                
+        t = Variable(labels, volatile=False)
+            
+        return F.softmax_cross_entropy(y, t)
+    
     def predict(self, X, on_gpu):
         T, batchsize, D = X.shape
-            
+        
         y = self.network.forward(X, 
                                  dropout_ratio=self.dropout_ratio, 
                                  train=False,
@@ -183,9 +186,9 @@ class DocumentClassifier(object):
                 k += 1
                 
                 optimizer.zero_grads() #important! before anything!
-                loss = get_loss(self.network, X, labels, 
-                                        on_gpu=on_gpu, 
-                                        dropout_ratio=self.dropout_ratio)
+                loss = self.get_loss(X, labels, 
+                                on_gpu=on_gpu)
+                                
                 loss.backward()                
                 optimizer.clip_grads(clip_threshold)
                 optimizer.update()

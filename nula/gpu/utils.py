@@ -89,7 +89,7 @@ def leakyrelu(x, out, alpha=0.1):
     This kernel is the leaky rectifier unit
     """
     
-    _LeakyReLU = get_LeakyReLU_kernel()
+    _LeakyReLU = _get_LeakyReLU_kernel()
     bdim, gdim = Get_bdim_and_gdim1D(x.size)   
     
     _LeakyReLU(grid=gdim, block=bdim,
@@ -530,7 +530,7 @@ def dot_add(A, B, C, transa=False, transb=False,
         raise ValueError('objects are not aligned')
     if C.shape != (n, m) or C.dtype != A.dtype:
         raise ValueError('invalid value for c')
-    cp.cuda.cublas.sgemm(cp.cuda.Device(cuda.get_device()).cublas_handle, 
+    cp.cuda.cublas.sgemm(cp.cuda.Device(cuda.get_device(A)).cublas_handle, 
                 transb, transa, m, n, k, np.float32(alpha), B.data.ptr,
                 np.int32(B.shape[1]), A.data.ptr, np.int32(A.shape[1]),np.float32(beta), 
                 C.data.ptr, np.int32(C.shape[1]))
