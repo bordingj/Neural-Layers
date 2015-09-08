@@ -1,6 +1,7 @@
 *.pyc
 *.pkl
 *.log
+*.png
 
 
 # Compiled source #
