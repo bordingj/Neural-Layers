@@ -1,4 +1,5 @@
 
+import cupy as cp
 from nula.models import BLSTMSequenceEmbed
 from document_classifier import DocumentClassifier
 import pandas as pd
@@ -75,42 +76,41 @@ if __name__ == '__main__':
     no_units = 256
     
     dropout_ratio = 0
-    
-    RNN_model = BLSTMSequenceEmbed(in_size=in_size,
-                                  no_labels=out_size, 
-                                  no_units=no_units)
-                              
-    clf = DocumentClassifier(corpus=corpus, dropout_ratio=dropout_ratio,
-                                        network=RNN_model)
-    
-    batchsize     = 512
-    seq_len       = 100
-    training_time = 200*60
-    no_iterations_per_epoch = 1000
-    path          = 'BLSTMSequenceEmbed_'
-    path += 'results.pkl'
-    
-    print('Starting training ...')
-    print('\nTraining BLSTM for sequence classfication/embedding with: \n \
-    - no. characters_lower_limit: {0} \n\
-     - no. of articles: {1} \n\
-     - no. of labels: {2} \n\
-     - no. of hidden units: {3} \n\
-     - dropout ratio: {4} \n\
-     - batchsize: {5} \n\
-     - sample sequence length: {6} \n\
-     - training time: {7} \n\
-     - iterations between monitoring/saving: {8} \n\
-     - saving to path: {9} \n\n'.format(
-    no_characters_lower_limit, corpus.shape[0], out_size, no_units, dropout_ratio,
-    batchsize, seq_len, training_time, no_iterations_per_epoch, path )
-    )
-    
-    clf.fit(path,  batchsize=batchsize, seq_len=seq_len ,
-                max_time_in_minutes=training_time,
-                no_iterations_per_epoch=no_iterations_per_epoch, 
-                clip_threshold=8,
-                  on_gpu=True,
-                  device=0)
+    with cp.cuda.Device(1):
+        RNN_model = BLSTMSequenceEmbed(in_size=in_size,
+                                      no_labels=out_size, 
+                                      no_units=no_units)
+                                  
+        clf = DocumentClassifier(corpus=corpus, dropout_ratio=dropout_ratio,
+                                            network=RNN_model)
+        
+        batchsize     = 512
+        seq_len       = 100
+        training_time = 200*60
+        no_iterations_per_epoch = 1000
+        path          = 'BLSTMSequenceEmbed_'
+        path += 'results.pkl'
+        
+        print('Starting training ...')
+        print('\nTraining BLSTM for sequence classfication/embedding with: \n \
+        - no. characters_lower_limit: {0} \n\
+         - no. of articles: {1} \n\
+         - no. of labels: {2} \n\
+         - no. of hidden units: {3} \n\
+         - dropout ratio: {4} \n\
+         - batchsize: {5} \n\
+         - sample sequence length: {6} \n\
+         - training time: {7} \n\
+         - iterations between monitoring/saving: {8} \n\
+         - saving to path: {9} \n\n'.format(
+        no_characters_lower_limit, corpus.shape[0], out_size, no_units, dropout_ratio,
+        batchsize, seq_len, training_time, no_iterations_per_epoch, path )
+        )
+        
+        clf.fit(path,  batchsize=batchsize, seq_len=seq_len ,
+                    max_time_in_minutes=training_time,
+                    no_iterations_per_epoch=no_iterations_per_epoch, 
+                    clip_threshold=8,
+                      on_gpu=True)
     
     

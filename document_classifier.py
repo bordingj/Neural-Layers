@@ -3,13 +3,13 @@ import numpy as np
 import pandas as pd
 from chainer import cuda, Variable, optimizers
 import chainer.functions as F
-import nula
 import time
 import string
 import random
 import pickle
 import copy
-import cupy as cp
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 def accuracy(probs, t):
@@ -152,12 +152,9 @@ class DocumentClassifier(object):
 
     def fit(self, save_path, batchsize, seq_len, 
                     max_time_in_minutes, no_iterations_per_epoch=1000, 
-                    clip_threshold=8, on_gpu=True, device=None):
+                    clip_threshold=8, on_gpu=True):
         
         if on_gpu:
-            assert device is None or isinstance(device, int)
-            device = cuda.Device(device)
-            device.use()
             self.network.to_gpu()
         else:
             self.network.to_cpu()
@@ -189,8 +186,8 @@ class DocumentClassifier(object):
                 
                 optimizer.zero_grads() #important! before anything!
                 loss = self.get_loss(X, labels, 
-                                on_gpu=on_gpu)
-                                
+                                    on_gpu=on_gpu)
+                                    
                 loss.backward()                
                 optimizer.clip_grads(clip_threshold)
                 optimizer.update()

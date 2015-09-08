@@ -1,10 +1,10 @@
 
-from nula.models import JonaNet
+import cupy as cp
+from nula.models import BLSTMSequenceEmbedwAtt
 from document_classifier import DocumentClassifier
 import pandas as pd
 import string
 import sys
-import cupy as cp
 
 if __name__ == '__main__':
     
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     
     dropout_ratio = 0
     with cp.cuda.Device(0):
-        RNN_model = JonaNet(in_size=in_size,
+        RNN_model = BLSTMSequenceEmbedwAtt(in_size=in_size,
                                       no_labels=out_size, 
                                       no_units=no_units)
                                   
@@ -86,13 +86,13 @@ if __name__ == '__main__':
         
         batchsize     = 320
         seq_len       = 100
-        training_time = 2*60
+        training_time = 60
         no_iterations_per_epoch = 200
-        path          = 'JonaNet_'
+        path          = 'BLSTMSequenceEmbedwAtt_'
         path += 'results.pkl'
         
         print('Starting training ...')
-        print('\nTraining JonaNet for sequence classfication/embedding with: \n \
+        print('\nTraining BLSTM for sequence classfication/embedding with: \n \
         - no. characters_lower_limit: {0} \n\
          - no. of articles: {1} \n\
          - no. of labels: {2} \n\

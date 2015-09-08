@@ -21,7 +21,6 @@ class Dropout(function.Function):
     def check_type_forward(self, in_types):
         x, = in_types
         type_check.expect(
-            x.shape[1] == self.no_cols,
             x.dtype == np.float32,
         )
         

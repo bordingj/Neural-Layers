@@ -11,6 +11,14 @@ ext_modules = cythonize(
            #sources=["*.cpp"],  # additional source file(s)
            include_path = [np.get_include()],
       )
+
+ext_modules += cythonize(
+
+           "nula/functions/add_matvec_elementwise_prod_cpu_funcs.pyx",      # our Cython source
+           #language="c++",             # generate C++ code
+           #sources=["*.cpp"],  # additional source file(s)
+           include_path = [np.get_include()],
+      )
       
 ext_modules += cythonize(
            "nula/cpu/utils.pyx",      # our Cython source
@@ -18,6 +26,8 @@ ext_modules += cythonize(
            #sources=["*.cpp"],  # additional source file(s)
            include_path = [np.get_include()],
 )
+
+
 
 extra_compile_args = ['-fopenmp']
 extra_link_args = ['-fopenmp']

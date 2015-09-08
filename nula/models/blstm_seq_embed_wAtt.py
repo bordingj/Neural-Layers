@@ -1,16 +1,18 @@
 
 import numpy as np
+import cupy as cp
 from chainer import cuda, Variable, FunctionSet
 import nula.functions as nF
+import chainer.functions as F
 from collections import deque
 
-class JonaNet(FunctionSet):
+class BLSTMSequenceEmbedwAtt(FunctionSet):
     def __init__(self, in_size, no_labels, no_units):
         """
         Bidirectional Long-short-term memory (LSTM) recurrent neural network, with 2 LSTM layers,
         input to the network is one-hot encoded indices.
         """
-        super(JonaNet, self).__init__(
+        super(BLSTMSequenceEmbedwAtt, self).__init__(
             # character embedding
             id_to_h0       = nF.SimpleLayer(in_size=in_size, 
                                              out_size=no_units,
@@ -31,21 +33,19 @@ class JonaNet(FunctionSet):
             h2_to_h3          = nF.SimpleLayer2Inputs(in_size=no_units, 
                                                          out_size=no_units,
                                                         act_func='tanh'),
-            #forward lstm layers
-            h3_to_h4_f       = nF.LSTMLayer(in_size=no_units, 
-                                                 out_size=no_units),
-            #backward lstm layers
-            h3_to_h4_b       = nF.LSTMLayer(in_size=no_units, 
-                                                 out_size=no_units),
-                                              
-            #simple layer with 2 inputs
-            h4_to_h5          = nF.SimpleLayer2Inputs(in_size=no_units, 
-                                                         out_size=no_units,
-                                                        act_func='tanh'),
+            h3_to_a           = nF.SimpleLayer(in_size=no_units,
+                                               out_size=1,
+                                               act_func='linear',
+                                               nobias=True),
+                                               
+            c_to_h4           = nF.SimpleLayer(in_size=no_units,
+                                               out_size=no_units,
+                                               act_func='leakyrelu'),
             #output layer
-            h5_to_y           = nF.SimpleLayer(in_size=no_units, 
-                                                    out_size=no_labels,
-                                                        act_func='linear'),
+            h4_to_y           = nF.SimpleLayer(in_size=no_units, 
+                                               out_size=no_labels,
+                                               act_func='linear'),
+                
         )
                     
     def make_initial_states(self, batchsize, on_gpu=False, train=True):
@@ -68,23 +68,8 @@ class JonaNet(FunctionSet):
                            volatile=not train)
         }
         return states
-
-    def make_initial_states2(self, batchsize, on_gpu=False, train=True):
-        if on_gpu:
-            module = cuda
-        else:
-            module = np
-        states = {
-            'c4': Variable(module.zeros((batchsize, self.h3_to_h4_f.out_size), 
-                                        dtype=np.float32),
-                           volatile=not train),
-            'h4': Variable(module.zeros((batchsize, self.h3_to_h4_f.out_size), 
-                                        dtype=np.float32),
-                           volatile=not train),
-        }
-        return states
         
-    def get_forward_states(self, h0, states_tm1, dropout_ratio, train=True):
+    def get_forward_states(self, h0, states_tm1, dropout_ratio, train):
         if dropout_ratio < 0.01:
             train=False
         #forward direction
@@ -94,7 +79,7 @@ class JonaNet(FunctionSet):
                                     states_tm1['h2'], states_tm1['c2'])
         return {'c1': c1_f, 'h1': h1_f, 'c2': c2_f, 'h2': h2_f}
     
-    def get_backward_states(self, h0, states_tp1, dropout_ratio, train=True):
+    def get_backward_states(self, h0, states_tp1, dropout_ratio, train):
         if dropout_ratio < 0.01:
             train=False
         #backward direction
@@ -103,19 +88,17 @@ class JonaNet(FunctionSet):
         h2_b, c2_b   = self.h1_to_h2_b(nF.dropout(h1_b, ratio=dropout_ratio, train=train),
                                     states_tp1['h2'], states_tp1['c2'])
         return {'c1': c1_b, 'h1': h1_b, 'c2': c2_b, 'h2': h2_b}
-
-    def get_forward_states2(self, h3, states_tm1):
-        #forward direction
-        h4_f, c4_f   = self.h3_to_h4_f(h3,
-                                    states_tm1['h4'], states_tm1['c4'])
-        return {'c4': c4_f, 'h4': h4_f}
     
-    def get_backward_states2(self, h3, states_tp1):
-        #backward direction
-        h4_b, c4_b   = self.h3_to_h4_b(h3,
-                                    states_tp1['h4'], states_tp1['c4'])
-        return {'c4': c4_b, 'h4': h4_b}
-    
+    def get_context(self, h2_forward_list, h2_backward_deque, train):
+        xp = np if isinstance(h2_forward_list[0].data, np.ndarray) else cp
+        c = Variable(xp.zeros((h2_forward_list[0].data.shape[0], self.h3_to_a.in_size),
+                               dtype=np.float32), volatile=not train)
+        for i, (h2_f, h2_b) in enumerate(zip(h2_forward_list, h2_backward_deque)):
+            h3 = self.h2_to_h3(h2_f, h2_b)
+            a  = F.softmax(self.h3_to_a(h3))
+            c  = nF.addMatVecElementwiseProd(a, h3, c)
+        return c
+                
     def forward(self, X, dropout_ratio, train=True, on_gpu=False):
         """
         Given input batch X this function propagates forward through the network,
@@ -164,34 +147,9 @@ class JonaNet(FunctionSet):
             if t%10==0:
                 h2_backward_deque.appendleft(states_tp1['h2'])
         
-        h3_list = []
-        for i, (h2_f, h2_b) in enumerate(zip(h2_forward_list, h2_backward_deque)):
-            h3 = self.h2_to_h3(h2_f, h2_b)
-            h3_list.append(h3)
-        
-
-        states_tm1 = self.make_initial_states2(batchsize=batchsize, 
-                                                    on_gpu=on_gpu, 
-                                                    train=train)
-        states_tp1 = self.make_initial_states2(batchsize=batchsize, 
-                                                    on_gpu=on_gpu, 
-                                                    train=train)
-                                                    
-        h4_forward_list = []
-        #forward through time
-        for h3 in h3_list:
-            states_tm1 = self.get_forward_states2(h3, states_tm1)
-            h4_forward_list.append(states_tm1['h4'])
-            
-        #backward through time
-        h4_backward_deque = deque([])
-        for h3 in reversed(h3_list):
-            states_tp1 = self.get_backward_states2(h3, states_tp1)
-            h4_backward_deque.appendleft(states_tp1['h4'])
-                
-            
+        #attention function / context
+        c = self.get_context(h2_forward_list, h2_backward_deque, train=train)
         #get final outputs
-        h5 = self.h4_to_h5(states_tm1['h4'], states_tp1['h4'])
-        y = self.h5_to_y(h5)
+        h4  = self.c_to_h4(c)
+        y   = self.h4_to_y(h4)
         return y
-
