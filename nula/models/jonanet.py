@@ -40,10 +40,10 @@ class JonaNet(FunctionSet):
                                               
             #simple layer with 2 inputs
             h4_to_h5          = nF.SimpleLayer2Inputs(in_size=no_units, 
-                                                         out_size=2*no_units,
+                                                         out_size=no_units,
                                                         act_func='tanh'),
             #output layer
-            h5_to_y           = nF.SimpleLayer(in_size=2*no_units, 
+            h5_to_y           = nF.SimpleLayer(in_size=no_units, 
                                                     out_size=no_labels,
                                                         act_func='linear'),
         )

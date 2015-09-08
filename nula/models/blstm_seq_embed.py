@@ -28,10 +28,10 @@ class BLSTMSequenceEmbed(FunctionSet):
                                               out_size=no_units),
             #simple layer with 2 inputs
             h2_to_h3          = nF.SimpleLayer2Inputs(in_size=no_units, 
-                                                         out_size=2*no_units,
+                                                         out_size=no_units,
                                                         act_func='tanh'),
             #output layer
-            h_to_y           = nF.SimpleLayer(in_size=2*no_units, 
+            h_to_y           = nF.SimpleLayer(in_size=no_units, 
                                                     out_size=no_labels,
                                                         act_func='linear'),
         )

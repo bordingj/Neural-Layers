@@ -63,7 +63,7 @@ if __name__ == '__main__':
     
     #merge corpus
     corpus = corpus.append(description.append(diagnosis))
-    whole_corpus = False
+    whole_corpus = True
     if not whole_corpus:
         number_of_articles = 50
         assert number_of_articles <= corpus.shape[0]
@@ -83,9 +83,9 @@ if __name__ == '__main__':
     clf = DocumentClassifier(corpus=corpus, dropout_ratio=dropout_ratio,
                                         network=RNN_model)
     
-    batchsize     = 256
+    batchsize     = 512
     seq_len       = 100
-    training_time = 60
+    training_time = 200*60
     no_iterations_per_epoch = 1000
     path          = 'BLSTMSequenceEmbed_'
     path += 'results.pkl'

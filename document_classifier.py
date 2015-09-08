@@ -1,5 +1,6 @@
 
 import numpy as np
+import pandas as pd
 from chainer import cuda, Variable, optimizers
 import chainer.functions as F
 import nula
@@ -9,6 +10,7 @@ import random
 import pickle
 import copy
 import cupy as cp
+import matplotlib.pyplot as plt
 
 def accuracy(probs, t):
     pred = np.argmax(probs, axis=1).astype(np.int32)
@@ -223,16 +225,22 @@ class DocumentClassifier(object):
             print('Test Recall@5: {0:3.2f}'.format(test_Recallat5_list[i]))
             print('Test Recall@10: {0:3.2f}'.format(test_Recallat10_list[i]))
             print('Test Recall@20: {0:3.2f}\n'.format(test_Recallat20_list[i]))
-            self.test_performance = {'test_loss': train_loss_list,
-                                      'test_accuracy': train_accuracy_list,
-                                      'test_Recallat5_list': train_Recallat5_list,
-                                      'test_Recallat10_list': train_Recallat10_list,
-                                      'test_Recallat20_list': train_Recallat20_list
+            self.test_performance = {'test_accuracy': test_accuracy_list,
+                                      'test_Recallat5_list': test_Recallat5_list,
+                                      'test_Recallat10_list': test_Recallat10_list,
+                                      'test_Recallat20_list': test_Recallat20_list
                                         }
+            
+            
+            
             self.save(save_path)
             time_elapsed = time.time()-start
             i += 1
             
+            pd.DataFrame(data={'test_accuracy': test_accuracy_list, 
+                        'train_accuracy': train_accuracy_list}).plot()
+            plt.savefig(str(type(self.network))[9:]+'_accuracy_'+'.png', format='png')
+            plt.close()
         print('\nTraining took {} minutes.'.format(int(time_elapsed/60)))
         print('Performed {} iterations.'.format(k))
         print('Saw {} samples per second'.format(batchsize*k/time_elapsed))
