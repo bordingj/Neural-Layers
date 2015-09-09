@@ -2,6 +2,7 @@
 *.pkl
 *.log
 *.png
+*.c
 
 
 # Compiled source #

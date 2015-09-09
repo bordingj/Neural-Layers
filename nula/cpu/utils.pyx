@@ -11,6 +11,33 @@ def weight_initialization(in_size, out_size, scale):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
+def get_MRR_and_ranks(np.float32_t[:,:] probs, np.int32_t[:] t):
+    pred = np.flipud(np.argsort(probs, axis=1).astype(np.int32))
+    assert pred.shape[0] == t.shape[0]
+    MRRs = np.empty((pred.shape[0],), dtype=np.float32)
+    Ranks = np.empty((pred.shape[0],), dtype=np.int32)
+    cdef:
+        int N = pred.shape[0]
+        int M = pred.shape[1]
+        np.intp_t i, j
+        np.int32_t true_idx
+        np.int32_t[:,:] pred_view = pred
+        np.int32_t[:] Ranks_view = Ranks
+        np.float32_t[:] MRRs_view = MRRs
+        
+        
+    for i in prange(N, schedule='guided', nogil=True):
+        true_idx = t[i]
+        for j in range(M):
+            if pred_view[i,j]==true_idx:
+                MRRs_view[i] = 1/(j+1)
+                Ranks_view[i] = j
+                break
+            
+    return Ranks, MRRs.mean()
+    
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def relu(np.float32_t[:,:] x, np.float32_t[:,:] out):
     cdef: 
         int N = x.shape[0]
