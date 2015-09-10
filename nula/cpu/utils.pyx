@@ -11,31 +11,55 @@ def weight_initialization(in_size, out_size, scale):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def get_MRR_and_ranks(np.float32_t[:,:] probs, np.int32_t[:] t):
-    pred = np.flipud(np.argsort(probs, axis=1).astype(np.int32))
+def getBatchPerformance(np.float32_t[:,:] probs, np.int32_t[:] t):
+    pred = np.fliplr(np.argsort(probs, axis=1).astype(np.int32))
     assert pred.shape[0] == t.shape[0]
-    MRRs = np.empty((pred.shape[0],), dtype=np.float32)
     Ranks = np.empty((pred.shape[0],), dtype=np.int32)
+    acc   = np.zeros((pred.shape[0],), dtype=np.float32)
+    MRRs = np.empty((pred.shape[0],), dtype=np.float32)
+    Recallat5 = np.zeros((pred.shape[0],), dtype=np.float32)
+    Recallat10 = np.zeros((pred.shape[0],), dtype=np.float32)
+    Recallat20 = np.zeros((pred.shape[0],), dtype=np.float32)
+    
     cdef:
         int N = pred.shape[0]
         int M = pred.shape[1]
         np.intp_t i, j
-        np.int32_t true_idx
+        np.int32_t true_idx, rank
         np.int32_t[:,:] pred_view = pred
         np.int32_t[:] Ranks_view = Ranks
+        np.float32_t[:] acc_view = acc
         np.float32_t[:] MRRs_view = MRRs
-        
+        np.float32_t[:] Recallat5_view = Recallat5
+        np.float32_t[:] Recallat10_view = Recallat10
+        np.float32_t[:] Recallat20_view = Recallat20
+                 
         
     for i in prange(N, schedule='guided', nogil=True):
         true_idx = t[i]
         for j in range(M):
             if pred_view[i,j]==true_idx:
-                MRRs_view[i] = 1/(j+1)
-                Ranks_view[i] = j
+                rank = j
+                Ranks_view[i] = rank
+                MRRs_view[i] = 1.0/(<np.float32_t>rank+1.0)
+                if rank==0:
+                    acc_view[i] = 1
+                    Recallat5_view[i]  = 1
+                    Recallat10_view[i] = 1
+                    Recallat20_view[i] = 1
+                elif rank < 5:
+                    Recallat5_view[i]  = 1
+                    Recallat10_view[i] = 1
+                    Recallat20_view[i] = 1
+                elif rank < 10:
+                    Recallat10_view[i] = 1
+                    Recallat20_view[i] = 1
+                elif rank < 20:
+                    Recallat20_view[i] = 1
                 break
             
-    return Ranks, MRRs.mean()
-    
+    return Ranks, acc.mean(), MRRs.mean(), Recallat5.mean(), Recallat10.mean(), Recallat20.mean()
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def relu(np.float32_t[:,:] x, np.float32_t[:,:] out):
