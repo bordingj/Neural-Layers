@@ -8,6 +8,75 @@ from nula.functions import add_matvec_elementwise_prod_cpu_funcs
 if cuda.available:
     import cupy as cp
     from nula import gpu
+
+    @cp.util.memoize(for_each_device=True)
+    def _get_forward_kernel():
+        
+        kernel_code = cp.carray.compile_with_cache("""
+        extern "C" __global__
+        void AddMatVecElementwiseProd(const float *x, const float *c, 
+                                      const float *a, float *y, 
+                                      const int N, const int M)
+        {   
+            int i = threadIdx.x + blockIdx.x * blockDim.x;
+            int j = threadIdx.y + blockIdx.y * blockDim.y;
+        
+                if (i < N && j < M){
+                y[i*M+j] = a[i]*x[i*M+j] + c[i*M+j];
+            }
+        }
+        """)
+        return kernel_code.get_function('AddMatVecElementwiseProd')
+    
+    @cp.util.memoize(for_each_device=True)
+    def _get_MatVecElementwise_kernel():
+        
+        kernel_code = cp.carray.compile_with_cache("""
+        extern "C" __global__
+        void MatVecElementwiseProd(const float *gy, const float *a, float *gx, 
+                                      const int N, const int M)
+        {   
+            int i = threadIdx.x + blockIdx.x * blockDim.x;
+            int j = threadIdx.y + blockIdx.y * blockDim.y;
+        
+                if (i < N && j < M){
+                gx[i*M+j] = a[i]*gy[i*M+j];
+            }
+        }
+        """)
+        return kernel_code.get_function('MatVecElementwiseProd')
+    
+    @cp.util.memoize(for_each_device=True)
+    def _get_ga_kernel():
+        kernel_code = cp.carray.compile_with_cache("""
+        extern "C" __global__
+        void get_ga(const float *gy, const float *x, float *ga, 
+                                      const int N, const int M)
+        {   
+            __shared__ float shared_mat[16];
+            float sum = 0;
+            
+            if (blockIdx.x < N){
+            for (unsigned int i = threadIdx.x; i < M; i += 16) {
+                sum += gy[blockIdx.x * M + i]*x[blockIdx.x * M + i];
+            }
+            shared_mat[threadIdx.x] = sum;
+            __syncthreads();
+            
+        
+            if (threadIdx.x == 0) {
+                float total_sum = 0;
+                
+                for (unsigned int i = 0; i < 16; i++){
+                    total_sum += shared_mat[i];           
+                }
+                ga[blockIdx.x] = total_sum;
+                
+            }
+        }
+        }
+        """)
+        return kernel_code.get_function('get_ga')
     
 class AddMatVecElementwiseProd(function.Function):
 
@@ -58,25 +127,6 @@ class AddMatVecElementwiseProd(function.Function):
 def addMatVecElementwiseProd(a, x, c):
     return AddMatVecElementwiseProd()(a, x, c)
 
-@cp.util.memoize(for_each_device=True)
-def _get_forward_kernel():
-    
-    kernel_code = cp.carray.compile_with_cache("""
-    extern "C" __global__
-    void AddMatVecElementwiseProd(const float *x, const float *c, 
-                                  const float *a, float *y, 
-                                  const int N, const int M)
-    {   
-        int i = threadIdx.x + blockIdx.x * blockDim.x;
-        int j = threadIdx.y + blockIdx.y * blockDim.y;
-    
-            if (i < N && j < M){
-            y[i*M+j] = a[i]*x[i*M+j] + c[i*M+j];
-        }
-    }
-    """)
-    return kernel_code.get_function('AddMatVecElementwiseProd')
-
 def _forward_gpu(x, c, a, y):
     
     
@@ -96,23 +146,7 @@ def _forward_gpu(x, c, a, y):
                    ) )
     return y
 
-@cp.util.memoize(for_each_device=True)
-def _get_MatVecElementwise_kernel():
-    
-    kernel_code = cp.carray.compile_with_cache("""
-    extern "C" __global__
-    void MatVecElementwiseProd(const float *gy, const float *a, float *gx, 
-                                  const int N, const int M)
-    {   
-        int i = threadIdx.x + blockIdx.x * blockDim.x;
-        int j = threadIdx.y + blockIdx.y * blockDim.y;
-    
-            if (i < N && j < M){
-            gx[i*M+j] = a[i]*gy[i*M+j];
-        }
-    }
-    """)
-    return kernel_code.get_function('MatVecElementwiseProd')
+
 
 def _MatVecElementwise_gpu(gy, a, gx):
     
@@ -132,46 +166,13 @@ def _MatVecElementwise_gpu(gy, a, gx):
                    ) )
     return gx
 
-@cp.util.memoize(for_each_device=True)
-def _get_ga_kernel():
-    kernel_code = cp.carray.compile_with_cache("""
-    extern "C" __global__
-    void get_ga(const float *gy, const float *x, float *ga, 
-                                  const int N, const int M)
-    {   
-        __shared__ float shared_mat[16];
-        float sum = 0;
-        
-        if (blockIdx.x < N){
-        for (unsigned int i = threadIdx.x; i < M; i += 16) {
-            sum += gy[blockIdx.x * M + i]*x[blockIdx.x * M + i];
-        }
-        shared_mat[threadIdx.x] = sum;
-        __syncthreads();
-        
-    
-        if (threadIdx.x == 0) {
-            float total_sum = 0;
-            
-            for (unsigned int i = 0; i < 16; i++){
-                total_sum += shared_mat[i];           
-            }
-            ga[blockIdx.x] = total_sum;
-            
-        }
-    }
-    }
-    """)
-    return kernel_code.get_function('get_ga')
-
-
 def _get_ga_gpu(gy, x, ga):
     
     
     _get_ga = _get_ga_kernel()
     N, M = x.shape
 
-    _get_ga(grid=(N, 1, 1), block=(32, 1, 1),
+    _get_ga(grid=(N, 1, 1), block=(16, 1, 1),
              args=(gy, x, ga,
                    np.int32(N),
                    np.int32(M)

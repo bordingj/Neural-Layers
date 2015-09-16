@@ -10,6 +10,24 @@ if cuda.available:
     from cupy.cuda import curand
     from nula import gpu
     
+    @cp.util.memoize(for_each_device=True)
+    def _get_dropout_kernel():
+        
+        kernel_code = cp.carray.compile_with_cache("""
+        extern "C" __global__
+        void Dropout(float* x, float* mask, float* y, float dropout_ratio,
+                       float scale, const int N)
+        {   
+            int i = threadIdx.x + blockIdx.x * blockDim.x;
+        
+                if (i < N){
+                mask[i] = mask[i] < dropout_ratio ? 0 : scale;
+                y[i]    = mask[i] * x[i];
+            }
+        }
+        """)
+        return kernel_code.get_function('Dropout')
+        
 class Dropout(function.Function):
 
     """Dropout regularization."""
@@ -72,23 +90,7 @@ def dropout(x, ratio=.5, train=True):
         return Dropout(ratio)(x)
     return x
 
-@cp.util.memoize(for_each_device=True)
-def _get_dropout_kernel():
-    
-    kernel_code = cp.carray.compile_with_cache("""
-    extern "C" __global__
-    void Dropout(float* x, float* mask, float* y, float dropout_ratio,
-                   float scale, const int N)
-    {   
-        int i = threadIdx.x + blockIdx.x * blockDim.x;
-    
-            if (i < N){
-            mask[i] = mask[i] < dropout_ratio ? 0 : scale;
-            y[i]    = mask[i] * x[i];
-        }
-    }
-    """)
-    return kernel_code.get_function('Dropout')
+
 
 def _get_mask_and_apply_dropout(x, mask, y, dropout_ratio, scale):
     

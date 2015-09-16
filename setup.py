@@ -1,32 +1,20 @@
 from setuptools import setup
 
+import os
 import numpy as np
 from Cython.Build import cythonize
 from Cython.Distutils import build_ext
 
-ext_modules = cythonize(
-
-           "nula/functions/lstm_cpu_funcs.pyx",      # our Cython source
-           #language="c++",             # generate C++ code
-           #sources=["*.cpp"],  # additional source file(s)
-           include_path = [np.get_include()],
-      )
-
-ext_modules += cythonize(
-
-           "nula/functions/add_matvec_elementwise_prod_cpu_funcs.pyx",      # our Cython source
-           #language="c++",             # generate C++ code
-           #sources=["*.cpp"],  # additional source file(s)
-           include_path = [np.get_include()],
-      )
-      
-ext_modules += cythonize(
-           "nula/cpu/utils.pyx",      # our Cython source
-           #language="c++",             # generate C++ code
-           #sources=["*.cpp"],  # additional source file(s)
-           include_path = [np.get_include()],
-)
-
+ext_modules = []
+for root, dirs, files in os.walk("nula"):
+    for file in files:
+        if file.endswith(".pyx"):
+            ext_modules += cythonize(
+                os.path.join(root, file),     # our Cython source
+               #language="c++",             # generate C++ code
+               #sources=["*.cpp"],  # additional source file(s)
+               include_path = [np.get_include()],
+              )
 
 
 extra_compile_args = ['-fopenmp']
