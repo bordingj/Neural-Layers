@@ -253,6 +253,6 @@ class CharBLSTM(FunctionSet):
                 x_data = X[t+1].ravel()
                 targets = Variable(x_data, volatile=not train)
                 targets_list.append(targets)
-            return y_list, targets
+            return y_list, targets_list
         return y_list
         
