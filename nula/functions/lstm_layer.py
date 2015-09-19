@@ -211,7 +211,7 @@ class LSTMLayer(function.Function):
             self.gV += gz.T.dot(h_tm1)
             if not self.nobias:
                 gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
-                self.gb += np.dot(self.gb_ones, gz)
+                self.gb += np.dot(gb_ones, gz)
         else:
             _lstm_backward_gpu(c=self.c, z=self.z, gh=gh, 
                           gc=gc, c_tm1=c_tm1,

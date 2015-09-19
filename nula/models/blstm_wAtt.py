@@ -89,13 +89,21 @@ class BLSTMwAtt(FunctionSet):
                                     states_tp1['h2'], states_tp1['c2'])
         return {'c1': c1_b, 'h1': h1_b, 'c2': c2_b, 'h2': h2_b}
     
-    def get_context(self, h2_forward_list, h2_backward_deque, train):
+    def get_context(self, h2_forward_list, h2_backward_deque, dropout_ratio, train):
         xp = np if isinstance(h2_forward_list[0].data, np.ndarray) else cp
+            
         c = Variable(xp.zeros((h2_forward_list[0].data.shape[0], self.h3_to_a.in_size),
                                dtype=np.float32), volatile=not train)
+        
+        if dropout_ratio < 0.01:
+            train=False
+                     
         for i, (h2_f, h2_b) in enumerate(zip(h2_forward_list, h2_backward_deque)):
             h3 = self.h2_to_h3(h2_f, h2_b)
-            a  = F.softmax(self.h3_to_a(h3))
+            a  = F.softmax(
+                    self.h3_to_a( nF.dropout(h3 , ratio=dropout_ratio, train=train)
+                    )
+                )
             c  = nF.addMatVecElementwiseProd(a, h3, c)
         return c
                 
@@ -179,7 +187,9 @@ class BLSTMwAtt(FunctionSet):
             h2_backward_deque.appendleft(states_tp1['h2'])
                     
         #attention function / context
-        c = self.get_context(h2_forward_list, h2_backward_deque, train=train)
+        c = self.get_context(h2_forward_list, h2_backward_deque, 
+                             dropout_ratio=dropout_ratio,
+                             train=train)
         #get final outputs
         h4  = self.c_to_h4(c)
         y   = self.h4_to_y(h4)
