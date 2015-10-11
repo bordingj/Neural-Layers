@@ -9,7 +9,7 @@ ext_modules = []
 
 
 
-for root, directories, filenames in os.walk('nula'):
+for root, directories, filenames in os.walk('./'):
     for filename in filenames: 
         fullpath = os.path.join(root,filename)
         if fullpath.endswith(".pyx"):

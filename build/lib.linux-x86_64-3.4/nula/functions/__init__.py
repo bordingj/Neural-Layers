@@ -20,6 +20,3 @@ pauseMask = pause_mask.pauseMask
 
 from nula.functions import convex_comb_1d
 ConvexComb1d = convex_comb_1d.ConvexComb1d
-
-from nula.functions import dummy_func
-DummyFunc = dummy_func.DummyFunc

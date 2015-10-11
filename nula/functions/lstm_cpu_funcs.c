@@ -2002,7 +2002,7 @@ static PyObject *__pyx_pf_4nula_9functions_14lstm_cpu_funcs_lstm_apply_nonlinear
             if (__pyx_t_3 > 0)
             {
                 #ifdef _OPENMP
-                #pragma omp parallel private(__pyx_t_5, __pyx_t_8, __pyx_t_13, __pyx_t_6, __pyx_t_4, __pyx_t_12, __pyx_t_14, __pyx_t_7, __pyx_t_10, __pyx_t_9, __pyx_t_11)
+                #pragma omp parallel private(__pyx_t_13, __pyx_t_5, __pyx_t_6, __pyx_t_12, __pyx_t_4, __pyx_t_7, __pyx_t_9, __pyx_t_8, __pyx_t_11, __pyx_t_10, __pyx_t_14)
                 #endif /* _OPENMP */
                 {
                     #ifdef _OPENMP
@@ -2334,22 +2334,22 @@ static PyObject *__pyx_pf_4nula_9functions_14lstm_cpu_funcs_2lstm_final_mem_cell
             if (__pyx_t_3 > 0)
             {
                 #ifdef _OPENMP
-                #pragma omp parallel private(__pyx_t_5, __pyx_t_6, __pyx_t_8, __pyx_t_13, __pyx_t_16, __pyx_t_4, __pyx_t_12, __pyx_t_14, __pyx_t_19, __pyx_t_7, __pyx_t_18, __pyx_t_15, __pyx_t_17, __pyx_t_10, __pyx_t_9, __pyx_t_11)
+                #pragma omp parallel private(__pyx_t_13, __pyx_t_5, __pyx_t_16, __pyx_t_18, __pyx_t_19, __pyx_t_12, __pyx_t_4, __pyx_t_7, __pyx_t_6, __pyx_t_9, __pyx_t_8, __pyx_t_11, __pyx_t_10, __pyx_t_14, __pyx_t_15, __pyx_t_17)
                 #endif /* _OPENMP */
                 {
                     #ifdef _OPENMP
-                    #pragma omp for firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) lastprivate(__pyx_v_j) lastprivate(__pyx_v_o_t) lastprivate(__pyx_v_c_k) lastprivate(__pyx_v_f_t) lastprivate(__pyx_v_i_t) lastprivate(__pyx_v_c_tilde_t) schedule(guided)
+                    #pragma omp for lastprivate(__pyx_v_f_t) lastprivate(__pyx_v_c_k) lastprivate(__pyx_v_o_t) lastprivate(__pyx_v_j) firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) lastprivate(__pyx_v_c_tilde_t) lastprivate(__pyx_v_i_t) schedule(guided)
                     #endif /* _OPENMP */
                     for (__pyx_t_2 = 0; __pyx_t_2 < __pyx_t_3; __pyx_t_2++){
                         {
                             __pyx_v_i = 0 + 1 * __pyx_t_2;
                             /* Initialize private variables to invalid values */
-                            __pyx_v_j = ((__pyx_t_5numpy_intp_t)0xbad0bad0);
-                            __pyx_v_o_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_c_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
                             __pyx_v_f_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_i_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_c_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_o_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_j = ((__pyx_t_5numpy_intp_t)0xbad0bad0);
                             __pyx_v_c_tilde_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_i_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
 
                             /* "nula/functions/lstm_cpu_funcs.pyx":39
  * 
@@ -2699,27 +2699,27 @@ static PyObject *__pyx_pf_4nula_9functions_14lstm_cpu_funcs_4lstm_backward_final
             if (__pyx_t_3 > 0)
             {
                 #ifdef _OPENMP
-                #pragma omp parallel private(__pyx_t_6, __pyx_t_27, __pyx_t_22, __pyx_t_28, __pyx_t_23, __pyx_t_12, __pyx_t_24, __pyx_t_19, __pyx_t_9, __pyx_t_30, __pyx_t_32, __pyx_t_20, __pyx_t_31, __pyx_t_15, __pyx_t_10, __pyx_t_16, __pyx_t_11, __pyx_t_5, __pyx_t_8, __pyx_t_13, __pyx_t_4, __pyx_t_14, __pyx_t_7, __pyx_t_18, __pyx_t_29, __pyx_t_17, __pyx_t_26, __pyx_t_25, __pyx_t_21)
+                #pragma omp parallel private(__pyx_t_21, __pyx_t_22, __pyx_t_25, __pyx_t_16, __pyx_t_10, __pyx_t_20, __pyx_t_19, __pyx_t_29, __pyx_t_12, __pyx_t_4, __pyx_t_7, __pyx_t_6, __pyx_t_9, __pyx_t_8, __pyx_t_11, __pyx_t_13, __pyx_t_18, __pyx_t_26, __pyx_t_31, __pyx_t_30, __pyx_t_32, __pyx_t_23, __pyx_t_15, __pyx_t_5, __pyx_t_24, __pyx_t_28, __pyx_t_27, __pyx_t_14, __pyx_t_17)
                 #endif /* _OPENMP */
                 {
                     #ifdef _OPENMP
-                    #pragma omp for lastprivate(__pyx_v_j) lastprivate(__pyx_v_tanh_c_k) lastprivate(__pyx_v_gc_k) lastprivate(__pyx_v_o_t) lastprivate(__pyx_v_gh_k) lastprivate(__pyx_v_c_tilde_t) lastprivate(__pyx_v_f_t) lastprivate(__pyx_v_gi_k) lastprivate(__pyx_v_gf_k) lastprivate(__pyx_v_i_t) lastprivate(__pyx_v_gc_tm1_k) firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) schedule(guided)
+                    #pragma omp for firstprivate(__pyx_v_i) lastprivate(__pyx_v_i) lastprivate(__pyx_v_gf_k) lastprivate(__pyx_v_gh_k) lastprivate(__pyx_v_gc_tm1_k) lastprivate(__pyx_v_c_tilde_t) lastprivate(__pyx_v_i_t) lastprivate(__pyx_v_f_t) lastprivate(__pyx_v_gi_k) lastprivate(__pyx_v_j) lastprivate(__pyx_v_tanh_c_k) lastprivate(__pyx_v_gc_k) lastprivate(__pyx_v_o_t) schedule(guided)
                     #endif /* _OPENMP */
                     for (__pyx_t_2 = 0; __pyx_t_2 < __pyx_t_3; __pyx_t_2++){
                         {
                             __pyx_v_i = 0 + 1 * __pyx_t_2;
                             /* Initialize private variables to invalid values */
+                            __pyx_v_gf_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_gh_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_gc_tm1_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_c_tilde_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_i_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_f_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
+                            __pyx_v_gi_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
                             __pyx_v_j = ((__pyx_t_5numpy_intp_t)0xbad0bad0);
                             __pyx_v_tanh_c_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
                             __pyx_v_gc_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
                             __pyx_v_o_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_gh_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_c_tilde_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_f_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_gi_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_gf_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_i_t = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
-                            __pyx_v_gc_tm1_k = ((__pyx_t_5numpy_float32_t)__PYX_NAN());
 
                             /* "nula/functions/lstm_cpu_funcs.pyx":66
  * 

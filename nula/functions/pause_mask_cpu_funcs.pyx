@@ -8,7 +8,7 @@ from cython.parallel import prange
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def forward(np.float32_t[:,:] x, np.int32_t[:] indices, np.int32_t[:] pause_indices, 
-            np.float32_t[:,:] row_masks, np.float32_t[:,:] y):
+            np.float32_t[:] row_masks, np.float32_t[:,:] y):
     cdef:
         int N = x.shape[0]
         int M = x.shape[1]

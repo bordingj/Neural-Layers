@@ -11,7 +11,7 @@ if cuda.available:
 def dummy_func(x):
     return x
     
-class BLSTM(FunctionSet):
+class BLSTMwAtt(FunctionSet):
     def __init__(self, in_size, no_labels, no_units, dropout, dropout_ratio=0.5):
         """
         Bidirectional Long-short-term memory (LSTM) recurrent neural network, with 2 LSTM layers,
@@ -24,8 +24,9 @@ class BLSTM(FunctionSet):
             no_units_secondlstm_layer = int(1/(1-dropout_ratio)*no_units)
         else:
             no_units_secondlstm_layer = no_units
+        word_level_no_units = no_units_secondlstm_layer*2
         
-        super(BLSTM, self).__init__(
+        super(BLSTMwAtt, self).__init__(
             # character embedding
             id_to_h0       = nF.SimpleLayer(in_size=in_size, 
                                              out_size=no_units,
@@ -48,17 +49,21 @@ class BLSTM(FunctionSet):
                                               
             #simple layer with 2 inputs
             h2_to_h3          = nF.SimpleLayer2Inputs(in_size=no_units_secondlstm_layer, 
-                                                         out_size=no_units_secondlstm_layer*2,
+                                                         out_size=word_level_no_units,
                                                         act_func='tanh'),
+            #attention functions
+            h3_to_a           = nF.SimpleLayer(in_size=word_level_no_units,
+                                               out_size=1,
+                                               act_func='linear',
+                                               nobias=True),
                                                
-            h3_to_h4           = nF.SimpleLayer(in_size=no_units_secondlstm_layer*2,
-                                               out_size=no_units_secondlstm_layer*2,
+            c_to_h4           = nF.SimpleLayer(in_size=word_level_no_units,
+                                               out_size=word_level_no_units,
                                                act_func='leakyrelu'),
             #output layer
-            h4_to_y           = nF.SimpleLayer(in_size=no_units_secondlstm_layer*2, 
+            h4_to_y           = nF.SimpleLayer(in_size=word_level_no_units, 
                                                out_size=no_labels,
                                                act_func='linear'),
-                                               
             dropout        = nF.Dropout(dropout_ratio) if dropout else dummy_func
         )
                     
@@ -104,8 +109,29 @@ class BLSTM(FunctionSet):
             h2_b, c2_b   = self.h1_to_h2_b(h1_b,
                                         states_tp1['h2'], states_tp1['c2'])
         return {'c1': c1_b, 'h1': h1_b, 'c2': c2_b, 'h2': h2_b}
+    
+    def get_context(self, h2_forward_list, h2_backward_deque, train):
+        xp = np if isinstance(h2_forward_list[0].data, np.ndarray) else cp
+            
+        c = Variable(xp.zeros((h2_forward_list[0].data.shape[0], self.h3_to_a.in_size),
+                               dtype=np.float32), volatile=not train)
+                     
+        for i, (h2_f, h2_b) in enumerate(zip(h2_forward_list, h2_backward_deque)):
+            h3 = self.h2_to_h3(h2_f, h2_b)
+            if train:
+                a  = F.softmax(
+                            self.h3_to_a( self.dropout(h3)
+                            )
+                        )
+            else:
+                a  = F.softmax(
+                            self.h3_to_a( h3
+                            )
+                        )
+            c  = nF.addMatVecElementwiseProd(a, h3, c)
+        return c
                 
-    def forward(self, X, train, on_gpu, **kwargs):
+    def forward(self, X, whitespace_indices, train, on_gpu, **kwargs):
         """
         Given input batch X this function propagates forward through the network,
         forward and backward through-time and returns a vector representation of the sequences
@@ -120,6 +146,7 @@ class BLSTM(FunctionSet):
             
         if on_gpu:
             X = cuda.to_gpu(X.astype(np.int32))
+            whitespace_indices = cuda.to_gpu(whitespace_indices.astype(np.int32))
 
         T, batchsize, D = X.shape
         assert D == 1
@@ -147,6 +174,12 @@ class BLSTM(FunctionSet):
                                                  train=train)
             h0_list.append(h0)
 
+            if t < (T-1):
+                h2_forward_list.append(nF.pauseMask(states_tm1['h2'], indices, 
+                                                         whitespace_indices))
+            else:
+                h2_forward_list.append(states_tm1['h2'])
+
         if len(h2_forward_list) == 0:
             h2_forward_list.append(states_tm1['h2'])
     
@@ -157,17 +190,19 @@ class BLSTM(FunctionSet):
             indices = indices_list[t]
             states_tp1 = self.get_backward_states(h0_list[t], states_tp1, 
                                                   train=train)
-
+            if t > 0:
+                h2_backward_deque.appendleft(nF.pauseMask(states_tp1['h2'], indices, 
+                                                               whitespace_indices))
+            else:
+                h2_backward_deque.appendleft(states_tp1['h2'])
 
         if len(h2_backward_deque) == 0:
             h2_backward_deque.appendleft(states_tp1['h2'])
                     
         #attention function / context
-        h3 = self.h2_to_h3(states_tm1['h2'], states_tp1['h2'])
+        c = self.get_context(h2_forward_list, h2_backward_deque, 
+                             train=train)
         #get final outputs
-        if train:
-            h4  = self.h3_to_h4(self.dropout(h3))
-        else:
-            h4  = self.h3_to_h4(h3)
+        h4  = self.c_to_h4(c)
         y   = self.h4_to_y(h4)
         return y

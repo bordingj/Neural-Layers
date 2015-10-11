@@ -2,7 +2,6 @@
 from nula import cpu
 
 from chainer import cuda
-
 if cuda.available:
     from nula import gpu
 
