@@ -11,6 +11,23 @@ def weight_initialization(in_size, out_size, scale):
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
+def getNoWhitespaces(np.int32_t[:,:,:] IDs, np.int32_t[:] whitespace_IDs):
+    cdef: 
+        int no_whitespace_ids = whitespace_IDs.shape[0]
+        int T = IDs.shape[0]
+        int N = IDs.shape[1]
+        np.int32_t[:] no_whitespaces = np.zeros((N,), dtype=np.int32)
+        np.intp_t k, i, t
+    
+    for t in range(T):
+        for i in prange(N, schedule='guided', nogil=True):
+            for k in range(no_whitespace_ids):
+                if IDs[t,i,0] == whitespace_IDs[k]:
+                    no_whitespaces[i] += 1
+    return np.array(no_whitespaces, np.int32, copy=False, order='C')
+    
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def getBatchPerformance(np.float32_t[:,:] probs, np.int32_t[:] t):
     pred = np.fliplr(np.argsort(probs, axis=1).astype(np.int32))
     assert pred.shape[0] == t.shape[0]

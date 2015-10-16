@@ -5,6 +5,58 @@ import math
 from chainer import cuda
 import cupy as cp
 
+
+@cp.util.memoize(for_each_device=True)
+def _GetNoWhitespaces_kernel():
+    kernel_code = cp.carray.compile_with_cache("""
+    extern "C" __global__
+    void GetNoWhitespaces(const int* IDs, const int* whitespace_IDs, int* no_whitespaces,
+                     const int no_whitespace_ids, const int T, const int N){
+            
+        __shared__ int shared_vec[16];
+            
+        if (blockIdx.y < N){
+            int no_whitespaces_i = 0;
+            int n; 
+            for (int t = threadIdx.x; t < T; t += 16){
+                n = t*N+blockIdx.y;
+                for (int k=0; k<no_whitespace_ids; k++){
+                    if (IDs[n] == whitespace_IDs[k]){
+                        no_whitespaces_i += 1;         
+                        break;
+                    }               
+                } 
+            }
+            shared_vec[threadIdx.x] = no_whitespaces_i;
+            __syncthreads();
+            
+            if (threadIdx.x == 0){
+                for (int j=0; j<16; j++){
+                    no_whitespaces[blockIdx.y] += shared_vec[j];
+                }
+            }
+        }
+    }
+    """)
+    return kernel_code.get_function('GetNoWhitespaces')
+
+def getNoWhitespaces(IDs, whitespace_IDs):
+    no_whitespace_ids = whitespace_IDs.shape[0]
+    T = IDs.shape[0]
+    N = IDs.shape[1]
+    no_whitespaces = cp.zeros((N,), dtype=np.int32)
+    
+    _GetNoWhitespaces = _GetNoWhitespaces_kernel()
+    
+    bdim, gdim = (16,1,1), (1,N,1)
+
+    _GetNoWhitespaces(grid=gdim, block=bdim,
+          args=(IDs, whitespace_IDs, no_whitespaces,
+                no_whitespace_ids, T, N)
+            )
+    return no_whitespaces
+
+
 @cp.util.memoize(for_each_device=True)
 def _get_Relu_kernel():
     kernel_code = cp.carray.compile_with_cache("""

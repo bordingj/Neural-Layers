@@ -95,18 +95,18 @@ if cuda.available:
         """)
         return kernel_code.get_function('lstm_backward_finalmem_and_nonlinearities')
         
-class LSTMLayer(function.Function):
+class LSTMDecoderLayer(function.Function):
     """
-    This is a parametric LSTM layer as described in http://arxiv.org/pdf/1410.4615v3.pdf
     """
-    def __init__(self, in_size, out_size,
-                 Wscale=1.0, Vscale=1.0, 
+    def __init__(self, in_size, out_size, encode_size,
+                 Wscale=1.0, Vscale=1.0, Uscale=1.0,
                  nobias=False, bias=0.0, forget_bias=1.0):
    
         self.bias = np.float32(bias)
         self.nobias = nobias
         self.in_size = in_size
         self.out_size = out_size
+        self.encode_size = encode_size
         self.forget_bias = np.float32(forget_bias)
             
         #initialize weight matrices 
@@ -115,6 +115,9 @@ class LSTMLayer(function.Function):
         
         self.V = cpu.utils.weight_initialization(out_size, out_size*4, Vscale)
         self.gV = np.empty_like(self.V)
+        
+        self.U = cpu.utils.weight_initialization(encode_size, out_size*4, Uscale)
+        self.gU = np.empty_like(self.U)
         
         if not self.nobias:
             self.b = np.empty((1, out_size*4), dtype=np.float32)
@@ -127,32 +130,34 @@ class LSTMLayer(function.Function):
     @property
     def parameter_names(self):
         if not self.nobias:
-            return 'W', 'V', 'b'
+            return 'W', 'V','U', 'b'
         else:
-            return 'W', 'V'
+            return 'W', 'V', 'U'
 
     @property
     def gradient_names(self):
         if not self.nobias:
-            return 'gW', 'gV', 'gb'
+            return 'gW', 'gV', 'gU', 'gb'
         else:
-            return 'gW', 'gV'
+            return 'gW', 'gV', 'gU'
     
     def check_type_forward(self, in_types):
-        x, h_tm1, c_tm1 = in_types
+        x, h_tm1, c_tm1, q = in_types
         
         type_check.expect(
             h_tm1.shape == c_tm1.shape,
             c_tm1.shape == (x.shape[0], self.out_size),
             x.shape[1] == self.in_size,
+            c_tm1.shape == (x.shape[0], self.encode_size),
 
             c_tm1.dtype == np.float32,
             h_tm1.dtype == c_tm1.dtype,
+            q.dtype     == h_tm1.dtype,
         )
         
     def forward(self, inputs):
         xp = cuda.get_array_module(*inputs)
-        x, h_tm1, c_tm1 = inputs
+        x, h_tm1, c_tm1, q = inputs
         
         batchsize = x.shape[0]
         
@@ -163,6 +168,7 @@ class LSTMLayer(function.Function):
         if xp is np:
             self.z = np.dot(x, self.W.T, out=self.z)
             self.z += np.dot(h_tm1, self.V.T)
+            self.z += np.dot(q, self.U.T)
             if not self.nobias:
                 self.z += self.b
             
@@ -171,6 +177,7 @@ class LSTMLayer(function.Function):
         else:
             self.z = cp.dot(x, self.W.T, out=self.z)
             gpu.utils.dot_add(A=h_tm1, B=self.V, C=self.z, transb=True)
+            gpu.utils.dot_add(A=q, B=self.U, C=self.z, transb=True)
             if not self.nobias:
                 gpu.utils.addVec2Mat(self.z, self.b)
             _lstm_forward_gpu(z=self.z, c_tm1=c_tm1, c=self.c, 
@@ -181,7 +188,7 @@ class LSTMLayer(function.Function):
     def backward(self, inputs, grad_outputs):
         xp = cuda.get_array_module(*inputs)
         gh, gc = grad_outputs
-        x, h_tm1, c_tm1 = inputs
+        x, h_tm1, c_tm1, q = inputs
         
         if gh is None:
             gh = xp.array([[0]], dtype=np.float32)
@@ -211,6 +218,7 @@ class LSTMLayer(function.Function):
              # compute gradients of weight matrices
             self.gW += gz.T.dot(x)
             self.gV += gz.T.dot(h_tm1)
+            self.gU += gz.T.dot(q)
             if not self.nobias:
                 gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
                 self.gb += np.dot(gb_ones, gz)
@@ -226,6 +234,7 @@ class LSTMLayer(function.Function):
             # compute gradients of weight matrices
             gpu.utils.dot_add(gz, x, C=self.gW, transa=True)
             gpu.utils.dot_add(gz, h_tm1, C=self.gV, transa=True)
+            gpu.utils.dot_add(gz, q, C=self.gU, transa=True)
             if not self.nobias:
                 gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
                 gpu.utils.dot_add(gb_ones, gz, C=self.gb)

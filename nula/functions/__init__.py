@@ -23,3 +23,12 @@ ConvexComb1d = convex_comb_1d.ConvexComb1d
 
 from nula.functions import dummy_func
 DummyFunc = dummy_func.DummyFunc
+
+from nula.functions import extract_words
+ExtractWords = extract_words.ExtractWords
+extractWords = extract_words.extractWords
+getNoWhitespaces = extract_words.getNoWhitespaces
+
+from nula.functions import first_axis_fancy_indexing
+firstAxisFancyIndexing3D = first_axis_fancy_indexing.firstAxisFancyIndexing3D
+FirstAxisFancyIndexing3D = first_axis_fancy_indexing.FirstAxisFancyIndexing3D

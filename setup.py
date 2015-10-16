@@ -40,6 +40,6 @@ setup(
     ext_modules = ext_modules,
     include_dirs = [np.get_include()],
     cmdclass = {'build_ext': build_ext},
-    install_requires=['chainer>=1.3.0', 'numpy>=1.9',
+    install_requires=['chainer>=1.3.2', 'numpy>=1.9',
                       'cython>=0.22']
     )

@@ -17,11 +17,19 @@ if cuda.available:
         void crossentropy(const float *probs, const int *t, float *loss, 
                                       const int N, const int M)
         {   
-            __shared__ float shared_vec[32];
-            float logsum = 0;
+            __shared__ float shared_vec[16];
             int k;
+            int no_whitespaces;
             if (blockIdx.x < N){
-            for (unsigned int i = threadIdx.x; i < N; i += 32) {
+            
+            for (unsigned int i = threadIdx.x; i < M; i += 16) {
+                no_whitespaces = 0;
+                for (int k=0; k<no_pause_indices; k++){
+                    if (indices[i] == pause_indices[k]){
+                        was_a_pause = 1;
+                        break;
+                    }
+                }
                 k = t[i];
                 logsum += log(fmin(fmax(probs[i * M + k], 1.0E-8), 1.0));
             }
@@ -164,7 +172,7 @@ def _get_crossentropyloss_gpu(probs, t):
     kernel = _crossentropyloss_kernel()
     N, M = probs.shape
     loss = cp.empty((1,), dtype=np.float32)
-    kernel(grid=(1, 1, 1), block=(32, 1, 1),
+    kernel(grid=(N, 1, 1), block=(32, 1, 1),
              args=(probs, t, loss,
                    np.int32(N),
                    np.int32(M)
