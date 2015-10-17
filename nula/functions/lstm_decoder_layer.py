@@ -206,15 +206,18 @@ class LSTMDecoderLayer(function.Function):
         batchsize = x.shape[0]
         
         gx      = xp.empty((batchsize,self.in_size),dtype=np.dtype('float32'))
+        gq      = xp.empty((batchsize,self.encode_size),dtype=np.dtype('float32'))
         
         if xp is np:
             _lstm_backward_cpu(c=self.c, z=self.z, gh=gh, 
                           gc=gc, c_tm1=c_tm1,
                           gc_is_none=gc_is_none, gh_is_none=gh_is_none)
+
+            # compute gradient with respect to the input x
             gz = self.z
             gh_tm1 = np.dot(gz, self.V, out=self.h)
-            # compute gradient with respect to the input x
             gx = np.dot(gz, self.W, out=gx)
+            gq = np.dot(gz, self.U, out=gq) 
              # compute gradients of weight matrices
             self.gW += gz.T.dot(x)
             self.gV += gz.T.dot(h_tm1)
@@ -227,10 +230,11 @@ class LSTMDecoderLayer(function.Function):
                           gc=gc, c_tm1=c_tm1,
                           gc_is_none=gc_is_none, gh_is_none=gh_is_none)
 
+            # compute gradient with respect to the input x
             gz = self.z
             gh_tm1 = cp.dot(gz, self.V, out=self.h)
-            # compute gradient with respect to the input x
             gx = cp.dot(gz, self.W, out=gx)
+            gq = cp.dot(gz, self.U, out=gq)
             # compute gradients of weight matrices
             gpu.utils.dot_add(gz, x, C=self.gW, transa=True)
             gpu.utils.dot_add(gz, h_tm1, C=self.gV, transa=True)
@@ -239,7 +243,7 @@ class LSTMDecoderLayer(function.Function):
                 gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
                 gpu.utils.dot_add(gb_ones, gz, C=self.gb)
 
-        return gx, gh_tm1, gc_tm1
+        return gx, gh_tm1, gc_tm1, gq
 
 def _lstm_forward_gpu(z, c_tm1, c, h, out_size):
     
