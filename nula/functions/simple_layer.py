@@ -11,7 +11,22 @@ if cuda.available:
     import cupy as cp
     from nula import gpu
 
-
+    available_cu_act_funcs = {
+            'sigmoid': (gpu.utils.sigmoid, gpu.utils.gsigmoid),
+            'tanh': (gpu.utils.tanh, gpu.utils.gtanh),
+            'relu': (gpu.utils.relu, gpu.utils.grelu),
+            'leakyrelu': (gpu.utils.leakyrelu, gpu.utils.gleakyrelu),
+            'linear': (None, None)
+        }
+        
+available_act_funcs = {
+                    'sigmoid': (cpu.utils.sigmoid, cpu.utils.gsigmoid),
+                    'tanh': (cpu.utils.tanh, cpu.utils.gtanh),
+                    'relu': (cpu.utils.relu, cpu.utils.grelu),
+                    'leakyrelu': (cpu.utils.leakyrelu, cpu.utils.gleakyrelu),
+                    'linear': (None, None)
+                    }
+                    
 class SimpleLayer(function.Function):
     """
     This function is used to compute
@@ -52,21 +67,9 @@ class SimpleLayer(function.Function):
             self.b.fill(self.bias)
             self.gb = np.empty_like(self.b)
  
-        available_act_funcs = {
-                    'sigmoid': (cpu.utils.sigmoid, cpu.utils.gsigmoid),
-                    'tanh': (cpu.utils.tanh, cpu.utils.gtanh),
-                    'relu': (cpu.utils.relu, cpu.utils.grelu),
-                    'leakyrelu': (cpu.utils.leakyrelu, cpu.utils.gleakyrelu),
-                    'linear': (None, None)
-                    }
+
  
-        available_cu_act_funcs = {
-            'sigmoid': (gpu.utils.sigmoid, gpu.utils.gsigmoid),
-            'tanh': (gpu.utils.tanh, gpu.utils.gtanh),
-            'relu': (gpu.utils.relu, gpu.utils.grelu),
-            'leakyrelu': (gpu.utils.leakyrelu, gpu.utils.gleakyrelu),
-            'linear': (None, None)
-        }
+
          
         self.act_func = available_act_funcs[self.act_func_str][0]
         self.gact_func = available_act_funcs[self.act_func_str][1]
@@ -231,22 +234,6 @@ class SimpleLayer2Inputs(function.Function):
             self.b = np.empty((1, out_size), dtype=np.float32)
             self.b.fill(self.bias)
             self.gb = np.empty_like(self.b)
- 
-        available_act_funcs = {
-                    'sigmoid': (cpu.utils.sigmoid, cpu.utils.gsigmoid),
-                    'tanh': (cpu.utils.tanh, cpu.utils.gtanh),
-                    'relu': (cpu.utils.relu, cpu.utils.grelu),
-                    'leakyrelu': (cpu.utils.leakyrelu, cpu.utils.gleakyrelu),
-                    'linear': (None, None)
-                    }
- 
-        available_cu_act_funcs = {
-            'sigmoid': (gpu.utils.sigmoid, gpu.utils.gsigmoid),
-            'tanh': (gpu.utils.tanh, gpu.utils.gtanh),
-            'relu': (gpu.utils.relu, gpu.utils.grelu),
-            'leakyrelu': (gpu.utils.leakyrelu, gpu.utils.gleakyrelu),
-            'linear': (None, None)
-        }
          
         self.act_func = available_act_funcs[self.act_func_str][0]
         self.gact_func = available_act_funcs[self.act_func_str][1]
