@@ -73,9 +73,9 @@ class SimpleLayer(function.Function):
          
         self.act_func = available_act_funcs[self.act_func_str][0]
         self.gact_func = available_act_funcs[self.act_func_str][1]
- 
-        self.act_func_gpu = available_cu_act_funcs[self.act_func_str][0]
-        self.gact_func_gpu = available_cu_act_funcs[self.act_func_str][1]
+        if cuda.available:
+            self.act_func_gpu = available_cu_act_funcs[self.act_func_str][0]
+            self.gact_func_gpu = available_cu_act_funcs[self.act_func_str][1]
         
         self.z = None
         
@@ -237,9 +237,9 @@ class SimpleLayer2Inputs(function.Function):
          
         self.act_func = available_act_funcs[self.act_func_str][0]
         self.gact_func = available_act_funcs[self.act_func_str][1]
- 
-        self.act_func_gpu  = available_cu_act_funcs[self.act_func_str][0]
-        self.gact_func_gpu = available_cu_act_funcs[self.act_func_str][1]
+        if cuda.available:
+            self.act_func_gpu  = available_cu_act_funcs[self.act_func_str][0]
+            self.gact_func_gpu = available_cu_act_funcs[self.act_func_str][1]
         
         self.z = None
          
