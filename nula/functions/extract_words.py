@@ -52,47 +52,6 @@ if cuda.available:
         return kernel_code.get_function('forward')
 
     @cp.util.memoize(for_each_device=True)
-    def _GetForward_axes_swapped_kernel():
-        kernel_code = cp.carray.compile_with_cache("""
-            extern "C" __global__
-            void forward(const int* IDs, 
-                         const float* x, float* y,
-                         const int* no_whitespaces, const int* whitespace_IDs,
-                         const int no_whitespace_ids, const int T, const int N, const int M){
-                
-                int i = threadIdx.x + blockIdx.x * blockDim.x;
-                int j = threadIdx.y + blockIdx.y * blockDim.y;
-            
-                if (i<N && j<M){
-                    int no_whitespaces_i = 0;
-                    int n;
-                    int p;
-                    int q;
-                    int current_max_whitespaces = no_whitespaces[i];
-                    for (int t=0; t<T; t++){
-                        if (no_whitespaces_i < current_max_whitespaces){
-                            n = t*N+i*1+0;
-                            q = i*(T*M)+no_whitespaces_i*M+j;
-                            p = t*(N*M)+i*M+j;
-                            for (int k=0; k<no_whitespace_ids; k++){
-                                if (IDs[n] == whitespace_IDs[k]){
-                                    y[q] = x[p];
-                                    no_whitespaces_i += 1;
-                                    break;
-                                }
-                            }
-                        }
-                        else{
-                            break;
-                        }
-                    }
-                }
-            }
-            """)
-        return kernel_code.get_function('forward')
-        
-
-    @cp.util.memoize(for_each_device=True)
     def _GetBackward_kernel():
         kernel_code = cp.carray.compile_with_cache("""
             extern "C" __global__
@@ -131,51 +90,10 @@ if cuda.available:
             }
             """)
         return kernel_code.get_function('backward')
-
-    @cp.util.memoize(for_each_device=True)
-    def _GetBackward_axes_swapped_kernel():
-        kernel_code = cp.carray.compile_with_cache("""
-            extern "C" __global__
-            void backward(const int* IDs, 
-                         const float* gy, float* gx,
-                         const int* no_whitespaces, const int* whitespace_IDs,
-                         const int no_whitespace_ids, const int T, const int N, const int M){
-                
-                int i = threadIdx.x + blockIdx.x * blockDim.x;
-                int j = threadIdx.y + blockIdx.y * blockDim.y;
-                
-                if (i<N && j<M){
-                    int no_whitespaces_i = 0;
-                    int n;
-                    int p;
-                    int q;
-                    int current_max_whitespaces = no_whitespaces[i];
-                    for (int t=0; t<T; t++){
-                        if (no_whitespaces_i < current_max_whitespaces){
-                            n = t*N+i*1+0;
-                            q = i*(T*M)+no_whitespaces_i*M+j;
-                            p = t*(N*M)+i*M+j;
-                            for (int k=0; k<no_whitespace_ids; k++){
-                                if (IDs[n] == whitespace_IDs[k]){
-                                    gx[p] = gy[q];
-                                    no_whitespaces_i += 1;
-                                    break;
-                                }
-                            }
-                        }
-                        else{
-                            break;
-                        }
-                    }
-                }
-            }
-            """)
-        return kernel_code.get_function('backward')
     
 
 def _forward_gpu(IDs, x, y,
-                no_whitespaces, whitespace_IDs,
-                swapaxes):
+                no_whitespaces, whitespace_IDs):
     
     no_whitespace_ids = whitespace_IDs.shape[0]
     T = x.shape[0]
@@ -189,10 +107,7 @@ def _forward_gpu(IDs, x, y,
     else:
         bdim, gdim = gpu.utils.Get_bdim_and_gdim2D(N,M)
     
-    if swapaxes:
-        forward_kernel = _GetForward_axes_swapped_kernel()
-    else:
-        forward_kernel = _GetForward_kernel()
+    forward_kernel = _GetForward_kernel()
     
     forward_kernel(grid=gdim, block=bdim,
                    args=(IDs, 
@@ -204,8 +119,7 @@ def _forward_gpu(IDs, x, y,
     return y
 
 def _backward_gpu(IDs, gy, gx,
-                no_whitespaces, whitespace_IDs,
-                swapaxes):
+                no_whitespaces, whitespace_IDs):
     
     no_whitespace_ids = whitespace_IDs.shape[0]
     T = gx.shape[0]
@@ -219,10 +133,8 @@ def _backward_gpu(IDs, gy, gx,
     else:
         bdim, gdim = gpu.utils.Get_bdim_and_gdim2D(N,M)
     
-    if swapaxes:
-        Backward_kernel = _GetBackward_axes_swapped_kernel()
-    else:
-        Backward_kernel = _GetBackward_kernel()
+
+    Backward_kernel = _GetBackward_kernel()
     
     
     Backward_kernel(grid=gdim, block=bdim,
@@ -238,10 +150,9 @@ def _backward_gpu(IDs, gy, gx,
 class ExtractWords(function.Function):
     
 
-    def __init__(self, no_whitespaces, whitespace_IDs, swapaxes=False):
+    def __init__(self, no_whitespaces, whitespace_IDs):
         self.whitespace_IDs = whitespace_IDs
         self.no_whitespaces = no_whitespaces
-        self.swapaxes = swapaxes
 
     def check_type_forward(self, in_types):
         x, IDs = in_types
@@ -262,26 +173,16 @@ class ExtractWords(function.Function):
         
         if xp is np:
             max_no_whitespaces = int(xp.amax(self.no_whitespaces))
-            if self.swapaxes:
-                y = xp.zeros((N, max_no_whitespaces, D), dtype=np.float32)
-                y = extract_words_cpu_funcs.forward_axes_swapped(IDs, x, y, 
-                                                        self.no_whitespaces, 
-                                                        self.whitespace_IDs)
-            else:
-                y = xp.zeros((max_no_whitespaces, N, D), dtype=np.float32)
-                y = extract_words_cpu_funcs.forward(IDs, x, y, 
+            y = xp.zeros((max_no_whitespaces, N, D), dtype=np.float32)
+            y = extract_words_cpu_funcs.forward(IDs, x, y, 
                                                     self.no_whitespaces, 
                                                     self.whitespace_IDs)
         else:
             max_no_whitespaces = int(xp.amax(self.no_whitespaces))
-            if self.swapaxes:
-                y = xp.zeros((N, max_no_whitespaces, D), dtype=np.float32)
-            else:
-                y = xp.zeros((max_no_whitespaces, N, D), dtype=np.float32)
+            y = xp.zeros((max_no_whitespaces, N, D), dtype=np.float32)
             y = _forward_gpu(IDs, x, y, 
                             self.no_whitespaces, 
-                            self.whitespace_IDs,
-                            self.swapaxes)
+                            self.whitespace_IDs)
         return y,
         
     
@@ -293,24 +194,18 @@ class ExtractWords(function.Function):
         gx   = xp.zeros_like(x)
         
         if xp is np:
-            if self.swapaxes:
-                gx = extract_words_cpu_funcs.backward_axes_swapped(IDs, gy, gx, 
-                                                        self.no_whitespaces, 
-                                                        self.whitespace_IDs)
-            else:
-                gx = extract_words_cpu_funcs.backward(IDs, gy, gx, 
+            gx = extract_words_cpu_funcs.backward(IDs, gy, gx, 
                                                     self.no_whitespaces, 
                                                     self.whitespace_IDs)
         else:
             gx = _backward_gpu(IDs, gy, gx, 
                                self.no_whitespaces, 
-                               self.whitespace_IDs,
-                               self.swapaxes)
+                               self.whitespace_IDs)
             
         return gx, None
         
-def extractWords(x, IDs, no_whitespaces, whitespace_IDs, swapaxes=False):
-    return ExtractWords(no_whitespaces, whitespace_IDs, swapaxes)(x, IDs)
+def extractWords(x, IDs, no_whitespaces, whitespace_IDs):
+    return ExtractWords(no_whitespaces, whitespace_IDs)(x, IDs)
 
 
 def getNoWhitespaces(IDs, whitespace_IDs):

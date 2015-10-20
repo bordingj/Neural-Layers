@@ -35,3 +35,7 @@ getNoWhitespaces = extract_words.getNoWhitespaces
 from nula.functions import first_axis_fancy_indexing
 firstAxisFancyIndexing3D = first_axis_fancy_indexing.firstAxisFancyIndexing3D
 FirstAxisFancyIndexing3D = first_axis_fancy_indexing.FirstAxisFancyIndexing3D
+
+from nula.functions import swap_first_axes
+SwapFirstAxes = swap_first_axes.SwapFirstAxes
+swapfirstaxes = swap_first_axes.swapfirstaxes

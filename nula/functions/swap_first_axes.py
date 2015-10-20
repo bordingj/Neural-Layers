@@ -3,53 +3,63 @@ import numpy as np
 from chainer import cuda
 from chainer import function
 from chainer.utils import type_check
-from nula.functions import first_axis_fancy_indexing_cpu_funcs
+from nula.functions import swap_first_axes_cpu_funcs
+
+from nula import cpu
 
 if cuda.available:
     import cupy as cp
     from nula import gpu
-    
+
     @cp.util.memoize(for_each_device=True)
     def _GetForward_kernel():
         kernel_code = cp.carray.compile_with_cache("""
             extern "C" __global__
-            void forward(const float* x, float* y, const int* indices, const int offset,
-                         const int N, const int M){
+            void forward(const float* x, float* y, const int T, const int N, const int M){
                 
                 int i = threadIdx.x + blockIdx.x * blockDim.x;
                 int j = threadIdx.y + blockIdx.y * blockDim.y;
             
                 if (i<N && j<M){
-                    int t = indices[i]+offset;
-                    y[i*M+j] = x[t*N*M+i*M+j];
+                    int p;
+                    int q;
+                    for (int t=0; t<T; t++){
+                            y[i*(T*M) + t*M + j] = x[t*(N*M) + i*M + j];
+                    }
                 }
             }
             """)
         return kernel_code.get_function('forward')
-    
+        
+
     @cp.util.memoize(for_each_device=True)
     def _GetBackward_kernel():
         kernel_code = cp.carray.compile_with_cache("""
             extern "C" __global__
-            void backward(float* gx, const float* gy, const int* indices, const int offset,
-                         const int N, const int M){
+            void backward(const float* gy, float* gx, const int T, const int N, const int M){
                 
                 int i = threadIdx.x + blockIdx.x * blockDim.x;
                 int j = threadIdx.y + blockIdx.y * blockDim.y;
             
                 if (i<N && j<M){
-                    int t = indices[i]+offset;
-                    gx[t*N*M+i*M+j] = gy[i*M+j];
+                    int p;
+                    int q;
+                    for (int t=0; t<T; t++){
+                            gx[t*(N*M) + i*M + j] = gy[i*(T*M) + t*M + j];
+                    }
                 }
             }
             """)
         return kernel_code.get_function('backward')
 
 
-def _forward_gpu(x, y, indices, offset):
+
+def _forward_gpu(x):
     
-    N = y.shape[0]
-    M = y.shape[1]
+    T = x.shape[0]
+    N = x.shape[1]
+    M = x.shape[2]
+    y = cp.empty((N, T, M), dtype=np.float32)
     
     if N == 1:
         bdim, gdim = gpu.utils.Get_bdim_and_gdimRowVec(M)
@@ -61,16 +71,18 @@ def _forward_gpu(x, y, indices, offset):
     forward_kernel = _GetForward_kernel()
     
     forward_kernel(grid=gdim, block=bdim,
-                   args=(x, y, indices,
-                         offset, N, M
+                   args=(x, y,
+                         T, N, M
                          )
-                    )
+                    )  
     return y
 
-def _backward_gpu(gx, gy, indices, offset):
+def _backward_gpu(gy):
     
     N = gy.shape[0]
-    M = gy.shape[1]
+    T = gy.shape[1]
+    M = gy.shape[2]
+    gx = cp.empty((T, N, M), dtype=np.float32)
     
     if N == 1:
         bdim, gdim = gpu.utils.Get_bdim_and_gdimRowVec(M)
@@ -79,57 +91,46 @@ def _backward_gpu(gx, gy, indices, offset):
     else:
         bdim, gdim = gpu.utils.Get_bdim_and_gdim2D(N,M)
     
-    backward_kernel = _GetBackward_kernel()
+
+    Backward_kernel = _GetBackward_kernel()
     
-    backward_kernel(grid=gdim, block=bdim,
-                   args=(gx, gy, indices,
-                         offset, N, M
-                         )
-                    )
+    
+    Backward_kernel(grid=gdim, block=bdim,
+                   args=(gy, gx,
+                         T, N, M)
+                    )  
     return gx
 
-class FirstAxisFancyIndexing3D(function.Function):
+
+class SwapFirstAxes(function.Function):
     
-
-    def __init__(self, offset=0):
-        self.offset = offset
-
     def check_type_forward(self, in_types):
-        x, indices = in_types
+        x = in_types[0]
         type_check.expect(
             x.dtype == np.float32,
-            indices.dtype == np.int32,
-            indices.ndim == 1,
-            x.ndim == 3,
-            x.shape[1] == indices.shape[0],
+            x.ndim == 3
         )
         
     def forward(self, inputs):
         xp = cuda.get_array_module(*inputs)
-        x, indices = inputs
-        N, D = x.shape[1:]
+        x = inputs[0]
         
-        y = xp.empty((N, D), dtype=np.float32)
         if xp is np:
-            y = first_axis_fancy_indexing_cpu_funcs.forward(x, y, indices, self.offset)
+            y = swap_first_axes_cpu_funcs.forward(x)
         else:
-            y = _forward_gpu(x, y, indices, self.offset)
+            y = _forward_gpu(x)
         return y,
         
     
     def backward(self, inputs, grad_outputs):
         xp = cuda.get_array_module(*inputs)
-        x, indices = inputs
         gy = grad_outputs[0]
-        
-        gx   = xp.zeros_like(x)
-        
-        if xp is np:
-            gx = first_axis_fancy_indexing_cpu_funcs.backward(gx, gy, indices, self.offset)
-        else:
-            gx = _backward_gpu(gx, gy, indices, self.offset)
-            
-        return gx, None
 
-def firstAxisFancyIndexing3D(x, indices, offset=0):
-    return FirstAxisFancyIndexing3D(offset)(x, indices)
+        if xp is np:
+            gx = swap_first_axes_cpu_funcs.backward(gy)
+        else:
+            gx = _backward_gpu(gy)
+        return gx,
+        
+def swapfirstaxes(x):
+    return SwapFirstAxes()(x)
