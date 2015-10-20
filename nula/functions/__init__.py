@@ -39,3 +39,7 @@ FirstAxisFancyIndexing3D = first_axis_fancy_indexing.FirstAxisFancyIndexing3D
 from nula.functions import swap_first_axes
 SwapFirstAxes = swap_first_axes.SwapFirstAxes
 swapfirstaxes = swap_first_axes.swapfirstaxes
+
+from nula.functions import pad_third_axis
+PadThirdAxis = pad_third_axis.PadThirdAxis
+padthirdaxis = pad_third_axis.padthirdaxis
