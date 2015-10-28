@@ -194,15 +194,13 @@ class LSTMLayer(function.Function):
         else:
             gc_is_none = 0
         
-        gc_tm1 = xp.empty_like(c_tm1)
         gh_tm1 = xp.empty_like(h_tm1)
-        
         batchsize = x.shape[0]
-        
         gx      = xp.empty((batchsize,self.in_size),dtype=np.dtype('float32'))
+        gc_tm1 = self.c.copy()
         
         if xp is np:
-            _lstm_backward_cpu(c=self.c.copy(), z=self.z, gh=gh, 
+            _lstm_backward_cpu(c=gc_tm1, z=self.z, gh=gh, 
                           gc=gc, c_tm1=c_tm1,
                           gc_is_none=gc_is_none, gh_is_none=gh_is_none)
             gz = self.z
@@ -216,7 +214,7 @@ class LSTMLayer(function.Function):
                 gb_ones = xp.ones((1,batchsize), dtype=np.dtype('float32'))
                 self.gb += np.dot(gb_ones, gz)
         else:
-            _lstm_backward_gpu(c=self.c, z=self.z, gh=gh, 
+            _lstm_backward_gpu(c=gc_tm1, z=self.z, gh=gh, 
                           gc=gc, c_tm1=c_tm1,
                           gc_is_none=gc_is_none, gh_is_none=gh_is_none)
 
