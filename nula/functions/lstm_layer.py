@@ -83,7 +83,8 @@ class LSTMLayer(function.Function):
             if not self.nobias:
                 gpu.utils.addVec2Mat(z, self.b)
         
-        c, h = F.LSTM().forward(inputs=(c_tm1, z))
+        self.lstm_fun = F.LSTM()
+        c, h = self.lstm_fun.forward(inputs=(c_tm1, z))
         self.z = z
         return h, c
 
@@ -92,9 +93,8 @@ class LSTMLayer(function.Function):
         gh, gc = grad_outputs
         x, h_tm1, c_tm1 = inputs
         
-        gc_tm1, gz = F.LSTM().backward(inputs=(c_tm1, self.z), 
+        gc_tm1, gz = self.lstm_fun.backward(inputs=(c_tm1, self.z), 
                                      grad_outputs=(gc, gh))
-        
         
         batchsize = x.shape[0]        
         gh_tm1 = xp.empty_like(h_tm1)
