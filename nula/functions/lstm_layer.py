@@ -35,10 +35,8 @@ class LSTMLayer(function.Function):
         if not self.nobias:
             self.b = np.empty((1, out_size*4), dtype=np.float32)
             self.b.fill(self.bias)
-            self.b[0,out_size:out_size*2] = self.forget_bias
+            self.b[0,out_size*2:out_size*3] = self.forget_bias
             self.gb = np.empty_like(self.b)
-        
-        self.z = None
     
     @property
     def parameter_names(self):
@@ -85,7 +83,7 @@ class LSTMLayer(function.Function):
             if not self.nobias:
                 gpu.utils.addVec2Mat(z, self.b)
         
-        c, h = F.LSTM.forward(inputs=(c_tm1, z))
+        c, h = F.LSTM().forward(inputs=(c_tm1, z))
         self.z = z
         return h, c
 
@@ -94,7 +92,7 @@ class LSTMLayer(function.Function):
         gh, gc = grad_outputs
         x, h_tm1, c_tm1 = inputs
         
-        gc_tm1, gz = F.LSTM.backward(inputs=(c_tm1, self.z), 
+        gc_tm1, gz = F.LSTM().backward(inputs=(c_tm1, self.z), 
                                      grad_outputs=(gc, gh))
         
         
