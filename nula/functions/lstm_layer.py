@@ -158,7 +158,7 @@ class LSTMLayer(function.Function):
         
         self.z       = xp.empty((batchsize,self.out_size*4),dtype=np.dtype('float32'))
         self.c       = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
-        self.h       = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
+        h            = xp.empty((batchsize,self.out_size),dtype=np.dtype('float32'))
 
         if xp is np:
             self.z = np.dot(x, self.W.T, out=self.z)
@@ -167,16 +167,16 @@ class LSTMLayer(function.Function):
                 self.z += self.b
             
             _lstm_forward_cpu(z=self.z, c_tm1=c_tm1, c=self.c, 
-                         h=self.h, out_size=self.out_size)
+                         h=h, out_size=self.out_size)
         else:
             self.z = cp.dot(x, self.W.T, out=self.z)
             gpu.utils.dot_add(A=h_tm1, B=self.V, C=self.z, transb=True)
             if not self.nobias:
                 gpu.utils.addVec2Mat(self.z, self.b)
             _lstm_forward_gpu(z=self.z, c_tm1=c_tm1, c=self.c, 
-                         h=self.h, out_size=self.out_size)
+                         h=h, out_size=self.out_size)
             
-        return self.h, self.c
+        return h, self.c
 
     def backward(self, inputs, grad_outputs):
         xp = cuda.get_array_module(*inputs)
@@ -194,7 +194,8 @@ class LSTMLayer(function.Function):
         else:
             gc_is_none = 0
         
-        gc_tm1 = self.c
+        gc_tm1 = xp.empty_like(c_tm1)
+        gh_tm1 = xp.empty_like(h_tm1)
         
         batchsize = x.shape[0]
         
@@ -205,7 +206,7 @@ class LSTMLayer(function.Function):
                           gc=gc, c_tm1=c_tm1,
                           gc_is_none=gc_is_none, gh_is_none=gh_is_none)
             gz = self.z
-            gh_tm1 = np.dot(gz, self.V, out=self.h)
+            gh_tm1 = np.dot(gz, self.V, out=gh_tm1)
             # compute gradient with respect to the input x
             gx = np.dot(gz, self.W, out=gx)
              # compute gradients of weight matrices
@@ -220,7 +221,7 @@ class LSTMLayer(function.Function):
                           gc_is_none=gc_is_none, gh_is_none=gh_is_none)
 
             gz = self.z
-            gh_tm1 = cp.dot(gz, self.V, out=self.h)
+            gh_tm1 = cp.dot(gz, self.V, out=gh_tm1)
             # compute gradient with respect to the input x
             gx = cp.dot(gz, self.W, out=gx)
             # compute gradients of weight matrices

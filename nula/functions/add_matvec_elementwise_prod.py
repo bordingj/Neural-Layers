@@ -101,11 +101,11 @@ class AddMatVecElementwiseProd(function.Function):
         a, x, c = inputs   
             
         if xp is np:
-            self.y = a*x+c
+            y = a*x+c
         else:
             y = xp.empty_like(x)
-            self.y = _forward_gpu(x, c, a, y)
-        return self.y,
+            y = _forward_gpu(x, c, a, y)
+        return y,
     
     def backward(self, inputs, grad_outputs):
         xp = cuda.get_array_module(*inputs)
@@ -118,7 +118,7 @@ class AddMatVecElementwiseProd(function.Function):
             gx = a*gy
             ga = add_matvec_elementwise_prod_cpu_funcs.get_ga_cpu(gy, x, ga)
         else:
-            gx=self.y
+            gx = xp.empty_like(x)
             gx = _MatVecElementwise_gpu(gy, a, gx)
             ga = _get_ga_gpu(gy, x, ga)
             

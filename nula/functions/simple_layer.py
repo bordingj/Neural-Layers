@@ -137,14 +137,12 @@ class SimpleLayer(function.Function):
                 gpu.utils.addVec2Mat(self.z, self.b)
         
         #apply non-linear activation
-        if self.act_func_str in ('tanh', 'sigmoid'):
-            h = self.act_func(x=self.z, out=self.z)
-            self.h = h #save h for backpropagation
-        elif self.act_func_str in ('leakyrelu', 'relu'):
+        if self.act_func_str in ('tanh', 'sigmoid', 'leakyrelu', 'relu'):
             h = xp.empty_like(self.z)
             h = self.act_func(x=self.z, out=h)
+            self.h = h #save h for backpropagation
         elif self.act_func_str == 'linear':
-            h = self.z
+            h = self.z.copy()
         else:
             raise NotImplementedError('the activation function is not available')
         return h,
@@ -157,7 +155,7 @@ class SimpleLayer(function.Function):
         
         if self.act_func_str in ('tanh', 'sigmoid'):
             #backpropagate non-linearities
-            gz = self.gact_func(gy=gh, y=self.h, out=self.h)
+            gz = self.gact_func(gy=gh, y=self.h, out=self.z)
         elif self.act_func_str in ('leakyrelu', 'relu'):
             #backpropagate non-linearities
             gz = self.gact_func(x=self.z, gy=gh, out=self.z)
@@ -294,14 +292,12 @@ class SimpleLayer2Inputs(function.Function):
                 gpu.utils.addVec2Mat(self.z, self.b)
         
         #apply non-linear activation
-        if self.act_func_str in ('tanh', 'sigmoid'):
-            h = self.act_func(x=z, out=self.z)
-            self.h = h #save h for backpropagation
-        elif self.act_func_str in ('leakyrelu', 'relu'):
+        if self.act_func_str in ('tanh', 'sigmoid', 'leakyrelu', 'relu'):
             h = xp.empty_like(self.z)
             h = self.act_func(x=self.z, out=h)
+            self.h = h #save h for backpropagation
         elif self.act_func_str == 'linear':
-            h = self.z
+            h = self.z.copy()
         else:
             raise NotImplementedError('the activation function is not available')
         return h,
@@ -317,7 +313,7 @@ class SimpleLayer2Inputs(function.Function):
          
         if self.act_func_str in ('tanh', 'sigmoid'):
             #backpropagate non-linearities
-            gz = self.gact_func(gy=gh, y=self.h, out=self.h)
+            gz = self.gact_func(gy=gh, y=self.h, out=self.z)
         elif self.act_func_str in ('leakyrelu', 'relu'):
             #backpropagate non-linearities
             gz = self.gact_func(x=self.z, gy=gh, out=self.z)
